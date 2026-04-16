@@ -32,14 +32,87 @@ PARAMS_PSD = [
     "Trihalometanos Total",
 ]
 
+# ── Mapeamento PSD por desinfetante e pré-oxidação ───────────────────────────
+# Base legal: Nota (4) Anexo 9 – Portaria 888/2021:
+# "Análise exigida de acordo com o desinfetante utilizado e oxidante
+#  utilizado para pré-oxidação."
+
+PSD_POR_DESINFETANTE = {
+    "hipoclorito_cloro": [
+        "2,4,6 Triclorofenol", "2,4-diclorofenol",
+        "Ácidos haloacéticos total", "Clorato", "Clorito", "Cloro residual livre",
+    ],
+    "isocianuratos": [
+        "2,4,6 Triclorofenol", "2,4-diclorofenol",
+        "Ácidos haloacéticos total", "Clorato", "Clorito", "Cloro residual livre",
+    ],
+    "cloraminas": [
+        "2,4,6 Triclorofenol", "2,4-diclorofenol",
+        "Ácidos haloacéticos total", "Cloraminas Total", "Clorato", "Clorito",
+        "Cloro residual livre", "N-nitrosodimetilamina", "Trihalometanos Total",
+    ],
+    "dioxido_cloro": [
+        "Clorato", "Clorito",
+    ],
+    "ozonio": [
+        "2,4,6 Triclorofenol", "2,4-diclorofenol",
+        "Ácidos haloacéticos total", "Bromato",
+        "Clorato", "Clorito", "Cloro residual livre",
+    ],
+    "uv_cloro": [
+        "2,4,6 Triclorofenol", "2,4-diclorofenol",
+        "Ácidos haloacéticos total", "Clorato", "Clorito", "Cloro residual livre",
+    ],
+}
+
+PSD_PRE_OXIDACAO = {
+    "Nao realiza pre-oxidacao": [],
+    "Cloro (pre-cloracao)": ["2,4,6 Triclorofenol", "2,4-diclorofenol",
+                              "Ácidos haloacéticos total", "Clorato", "Clorito"],
+    "Ozonio": ["Bromato"],
+    "Dioxido de Cloro": ["Clorato", "Clorito"],
+    "Permanganato de Potassio": [],
+}
+
+DESINFETANTE_KEYS = {
+    "Hipoclorito de Sodio (NaOCl)":      "hipoclorito_cloro",
+    "Hipoclorito de Calcio [Ca(OCl)2]":  "hipoclorito_cloro",
+    "Cloro Gas (Cl2)":                   "hipoclorito_cloro",
+    "Isocianuratos Clorados":            "isocianuratos",
+    "Cloraminas (cloraminacao)":         "cloraminas",
+    "Dioxido de Cloro (ClO2)":           "dioxido_cloro",
+    "Ozonio (O3)":                       "ozonio",
+    "UV + Cloro residual":               "uv_cloro",
+}
+
+DESINFETANTE_OPCOES = list(DESINFETANTE_KEYS.keys())
+PREOX_OPCOES = list(PSD_PRE_OXIDACAO.keys())
+
+
+def calc_params_psd(desinfetante: str, oxidante_preox: str) -> list:
+    """
+    Retorna PSD exigidos conforme desinfetante principal + oxidante de pre-oxidacao.
+    Base legal: Nota (4) do Anexo 9, Portaria 888/2021.
+    """
+    chave = DESINFETANTE_KEYS.get(desinfetante, "hipoclorito_cloro")
+    params_d = PSD_POR_DESINFETANTE.get(chave, [])
+    params_p = PSD_PRE_OXIDACAO.get(oxidante_preox, [])
+    todos = set(params_d) | set(params_p)
+    return [p for p in PARAMS_PSD if p in todos]
+
 PARAMS_DEMAIS = [
     "1,2 Diclorobenzeno", "1,2 Dicloroetano", "1,4 Diclorobenzeno",
     "2,4 D", "Alacloro",
     "Aldicarbe + Aldicarbesulfona + Aldicarbesulfóxido",
-    "Aldrin + Dieldrin", "Alfa total", "Alumínio", "Ametrina",
+    "Aldrin + Dieldrin",
+    # Alfa total e Beta total são monitorados separadamente como
+    # Radioatividade – Semestral (Art. 37), não aqui como Trimestral.
+    "Alumínio", "Ametrina",
     "Amônia (como N)", "Antimônio", "Arsênio",
     "Atrazina + S-Clorotriazinas",
-    "Bário", "Benzeno", "Benzo[a]pireno", "Beta total", "Cádmio",
+    "Bário", "Benzeno", "Benzo[a]pireno",
+    # Beta total removido – monitorado junto com Alfa total em Radioatividade (Art. 37 / Semestral).
+    "Cádmio",
     "Carbendazim", "Carbofurano", "Chumbo", "Ciproconazol", "Clordano",
     "Cloreto", "Clorotalonil", "Clorpirifós + clorpirifós-oxon",
     "Cobre", "Cromo", "DDT+DDD+DDE", "Di(2-etilhexil) ftalato",
@@ -53,7 +126,9 @@ PARAMS_DEMAIS = [
     "Paraquate", "Pentaclorofenol", "Picloram", "Profenofós",
     "Propargito", "Protioconazol + Protioconazol-Destio", "Selênio",
     "Simazina", "Sódio", "Sólidos dissolvidos totais",
-    "Soma das razões de nitrito e nitrato", "Sulfato",
+    # "Soma das razões de nitrito e nitrato" é critério de cálculo (Art.39),
+    # não uma coleta independente – calculado a partir de Nitrato + Nitrito.
+    "Sulfato",
     "Sulfeto de hidrogênio", "Tebuconazol", "Terbufós",
     "Tetracloreto de Carbono", "Tetracloroeteno", "Tiametoxam",
     "Tiodicarbe", "Tiram", "Tolueno", "Tricloroeteno", "Trifluralina",
@@ -95,10 +170,12 @@ class Sistema:
 
     # Condicionais
     fluoretacao: bool = False
-    pre_oxidacao: bool = False
     acrilamida: bool = False
     epicloridrina: bool = False
     rede_pvc: bool = True
+    # Tipo de desinfetante – define quais parâmetros PSD são obrigatórios (Nota 4, Anexo 9)
+    desinfetante: str = "Hipoclorito de Sodio (NaOCl)"
+    oxidante_preox: str = "Nao realiza pre-oxidacao"
 
     # Identificação
     responsavel: str = ""
@@ -211,6 +288,8 @@ def gerar_plano(s: Sistema) -> list[LinhaPlano]:
     is_saa = s.tipo == "SAA"
     n_pts  = calc_anexo14(s.populacao)
     psd    = calc_psd(s.manancial, s.populacao)
+    # PSD filtrado pelo desinfetante real do sistema (Nota 4, Anexo 9)
+    params_psd = calc_params_psd(s.desinfetante, s.oxidante_preox)
 
     has_cap  = s.escopo == "completo"
     has_trat = s.escopo in ("completo", "trat_dist")
@@ -399,9 +478,9 @@ def gerar_plano(s: Sistema) -> list[LinhaPlano]:
             base_legal="Anexo 13",
         ))
 
-        # PSD na saída (subterrâneo)
+        # PSD na saída (subterrâneo) – apenas parâmetros do desinfetante utilizado
         if not is_sup:
-            for param in PARAMS_PSD:
+            for param in params_psd:
                 linhas.append(LinhaPlano(
                     etapa="Saída do Tratamento",
                     grupo="Prod. Sec. da Desinfecção",
@@ -464,10 +543,10 @@ def gerar_plano(s: Sistema) -> list[LinhaPlano]:
                 obs_ponto="Rede PVC – monitorar mesmo sem detecção na saída",
             ))
 
-        # PSD na rede (superficial)
+        # PSD na rede (superficial) – apenas parâmetros do desinfetante utilizado
         if is_sup:
             ponto_psd = f"{ponto01} – PSD"
-            for param in PARAMS_PSD:
+            for param in params_psd:
                 linhas.append(LinhaPlano(
                     etapa="Rede de Distribuição",
                     grupo="Prod. Sec. da Desinfecção",
