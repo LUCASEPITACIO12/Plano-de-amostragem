@@ -129,9 +129,32 @@ with st.sidebar:
             ])
             n_filtros = st.number_input("Nº de unidades filtrantes", 0, 30, 0,
                                         help="0 = sem filtros / simples desinfecção")
+            from calculos import DESINFETANTE_OPCOES, PREOX_OPCOES
+            desinfetante = st.selectbox(
+                "Desinfetante principal utilizado",
+                DESINFETANTE_OPCOES,
+                help=(
+                    "Define os Produtos Secundários da Desinfecção (PSD) obrigatorios "
+                    "— Nota (4) Anexo 9, Portaria 888/2021. "
+                    "Cloraminas: exige THM, Cloraminas Total e N-nitrosodimetilamina. "
+                    "Ozonio: exige Bromato. "
+                    "Dioxido de Cloro: somente Clorato e Clorito."
+                ),
+            )
+            oxidante_preox = st.selectbox(
+                "Oxidante utilizado na pre-oxidacao",
+                PREOX_OPCOES,
+                help=(
+                    "Se o sistema realiza pre-oxidacao com ozonio, o Bromato "
+                    "se torna obrigatorio mesmo que o desinfetante final seja cloro. "
+                    "Selecione 'Nao realiza pre-oxidacao' se nao houver essa etapa."
+                ),
+            )
         else:
-            tratamento = "Informado pelo responsável pelo tratamento"
+            tratamento = "Informado pelo responsavel pelo tratamento"
             n_filtros  = 0
+            desinfetante = "Hipoclorito de Sodio (NaOCl)"
+            oxidante_preox = "Nao realiza pre-oxidacao"
 
         col_p1, col_p2 = st.columns(2)
         with col_p1:
@@ -193,10 +216,12 @@ with st.sidebar:
                 populacao=int(populacao),
                 n_ligacoes=int(n_ligacoes),
                 fluoretacao=fluoretacao,
-                pre_oxidacao=pre_oxidacao,
+                oxidante_preox=oxidante_preox,
                 acrilamida=acrilamida,
                 epicloridrina=epicloridrina,
                 rede_pvc=rede_pvc,
+                desinfetante=desinfetante,
+                oxidante_preox=oxidante_preox,
                 responsavel=responsavel,
                 rt_nome=rt_nome,
                 rt_registro=rt_reg,
