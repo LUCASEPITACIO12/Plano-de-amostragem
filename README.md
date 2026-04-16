@@ -19,7 +19,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-O app abre automaticamente no navegador em http://localhost:8501
+O app abre automaticamente no navegador em [http://localhost:8501](https://plano-amostragem-888.streamlit.app/)
 
 ---
 
