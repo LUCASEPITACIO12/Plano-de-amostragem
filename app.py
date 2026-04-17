@@ -216,7 +216,6 @@ with st.sidebar:
                 populacao=int(populacao),
                 n_ligacoes=int(n_ligacoes),
                 fluoretacao=fluoretacao,
-                oxidante_preox=oxidante_preox,
                 acrilamida=acrilamida,
                 epicloridrina=epicloridrina,
                 rede_pvc=rede_pvc,
