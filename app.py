@@ -71,17 +71,49 @@ if "sistema_editando" not in st.session_state:
 
 # ── Sidebar – cadastro de sistemas ───────────────────────────────────────────
 with st.sidebar:
-    # ── Logos ──────────────────────────────────────────────────────────────
-    col_l1, col_l2, col_l3 = st.columns([2, 1, 2])
-    with col_l1:
-        st.image("assets/logo GVAM - sem o fundo branco.png", use_container_width=True)
-    with col_l2:
-        st.image("assets/logo suvisa.png", use_container_width=True)
-    with col_l3:
-        st.image("assets/logo alagoas.png", use_container_width=True)
+    # ── Header com logos ────────────────────────────────────────────────────
+    import base64, pathlib
 
-    st.title("Plano de Amostragem")
-    st.caption("Portaria GM/MS nº 888/2021 | SESAU-AL")
+    def _b64(name):
+        p = pathlib.Path("assets") / name
+        if p.exists():
+            return base64.b64encode(p.read_bytes()).decode()
+        return ""
+
+    # Tenta nomes com underline primeiro, depois com espaço (compatibilidade GitHub)
+    gvam_b64   = _b64("logo_gvam.png")   or _b64("logo GVAM - sem o fundo branco.png")
+    suvisa_b64 = _b64("logo_suvisa.png") or _b64("logo suvisa.png")
+    al_b64     = _b64("logo_alagoas.png")or _b64("logo alagoas.png")
+
+    def img_tag(b64, ext="png", h=52):
+        if b64:
+            return f'<img src="data:image/{ext};base64,{b64}" style="height:{h}px;object-fit:contain;">'
+        return ""
+
+    st.markdown(f"""
+    <div style="
+        background: linear-gradient(135deg, #1a3a5c 0%, #1f5c3a 100%);
+        border-radius: 12px;
+        padding: 16px 18px 12px;
+        margin-bottom: 16px;
+    ">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+            {img_tag(gvam_b64, h=48)}
+            <div style="display:flex; gap:10px; align-items:center;">
+                {img_tag(suvisa_b64, h=40)}
+                {img_tag(al_b64, h=34)}
+            </div>
+        </div>
+        <div style="border-top: 1px solid rgba(255,255,255,0.2); padding-top:10px;">
+            <div style="color:white; font-size:16px; font-weight:600; letter-spacing:.3px;">
+                💧 Plano de Amostragem
+            </div>
+            <div style="color:rgba(255,255,255,0.65); font-size:11px; margin-top:2px;">
+                Portaria GM/MS nº 888/2021 · SESAU-AL / GVAM
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     st.divider()
 
     st.subheader("➕ Cadastrar Sistema")
