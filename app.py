@@ -265,10 +265,17 @@ with st.sidebar:
 
         # ── Responsabilidade ─────────────────────────────────────────────────
         st.markdown("**Responsabilidade**")
-        empresa_responsavel = st.text_input(
-            "Empresa responsável pelo tratamento",
-            placeholder="Ex: SAAE Penedo / Agreste Saneamento",
-        )
+        col_e1, col_e2 = st.columns(2)
+        with col_e1:
+            empresa_responsavel = st.text_input(
+                "Empresa responsável pelo tratamento",
+                placeholder="Ex: Agreste Saneamento",
+            )
+        with col_e2:
+            empresa_distribuicao = st.text_input(
+                "Empresa responsável pela distribuição",
+                placeholder="Ex: CASAL / Verde Alagoas",
+            )
         responsavel_tratamento = st.text_input(
             "Pessoa responsável pelo tratamento (operador)",
             placeholder="Ex: João da Silva",
@@ -281,6 +288,10 @@ with st.sidebar:
             rt_conselho = st.selectbox("Conselho", ["CREA", "CRQ", "CRT", "Outro"])
         with col_r3:
             rt_reg = st.text_input("Nº de registro", placeholder="Ex: 12345-D/AL")
+        rt_dist_nome = ""
+        rt_dist_conselho = "CREA"
+        rt_dist_reg = ""
+        responsavel_distribuicao = ""
 
         col_geo1, col_geo2 = st.columns(2)
         with col_geo1:
@@ -330,6 +341,11 @@ with st.sidebar:
                 rt_nome=rt_nome,
                 rt_conselho=rt_conselho,
                 rt_registro=rt_reg,
+                empresa_distribuicao=empresa_distribuicao,
+                responsavel_distribuicao=responsavel_distribuicao,
+                rt_dist_nome=rt_dist_nome,
+                rt_dist_conselho=rt_dist_conselho,
+                rt_dist_registro=rt_dist_reg,
                 latitude=lat,
                 longitude=lon,
                 obs=obs,
@@ -351,7 +367,9 @@ with st.sidebar:
                 st.caption(f"**{s.municipio}** – {s.nome}")
                 st.caption(f"Pop.: {s.populacao:,} | {s.manancial} | {s.escopo}")
                 if s.empresa_responsavel:
-                    st.caption(f"🏢 {s.empresa_responsavel}")
+                    st.caption(f"🏭 Trat.: {s.empresa_responsavel}")
+                if s.empresa_distribuicao:
+                    st.caption(f"🚰 Dist.: {s.empresa_distribuicao}")
             with col_r:
                 if st.button("🗑️", key=f"del_{i}", help="Remover"):
                     st.session_state.sistemas.pop(i)
