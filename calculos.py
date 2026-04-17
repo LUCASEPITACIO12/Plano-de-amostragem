@@ -327,7 +327,7 @@ def calc_psd(manancial: str, populacao: int) -> dict:
     Retorna qtd por evento e lista de meses de coleta.
     """
     p = int(populacao or 0)
-    is_sup = "superficial" in manancial.lower()
+    is_sup = "superficial" in manancial.lower() or "misto" in manancial.lower()
     if is_sup:
         if p < 50_000:   return {"qtd": 1, "freq": "Bimestral", "meses": MESES_BIMESTRAL}
         if p <= 250_000: return {"qtd": 4, "freq": "Bimestral", "meses": MESES_BIMESTRAL}
@@ -348,8 +348,11 @@ def freq_turbidez_filtro(tratamento: str) -> Optional[str]:
 
 
 def freq_coliformes_saida(manancial: str) -> tuple:
-    """Retorna (frequência_texto, qtd_mensal)."""
-    if "superficial" in manancial.lower():
+    """Retorna (frequência_texto, qtd_mensal).
+    Misto ou qualquer superficial → frequência mais exigente (2×/semana).
+    """
+    m = manancial.lower()
+    if "superficial" in m or "misto" in m:
         return "2 vezes por semana", 8
     return "Semanal", 4
 
@@ -360,7 +363,7 @@ def gerar_plano(s: Sistema) -> list[LinhaPlano]:
     Respeita o escopo de responsabilidade da concessão.
     """
     linhas = []
-    is_sup = "superficial" in s.manancial.lower()
+    is_sup = "superficial" in s.manancial.lower() or "misto" in s.manancial.lower()
     is_saa = s.tipo == "SAA"
     n_pts  = calc_anexo14(s.populacao)
     psd    = calc_psd(s.manancial, s.populacao)
