@@ -24,7 +24,7 @@ st.set_page_config(
 st.markdown("""
 <style>
 [data-testid="stAppViewContainer"] { background: #f8f9fb; }
-[data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid #e8ecf0; }
+[data-testid="stSidebar"] { background: linear-gradient(180deg, #e8f4f0 0%, #deeef8 50%, #eaf0f8 100%); border-right: 1px solid #c8dcea; }
 .metric-card {
     background: #ffffff;
     border: 1px solid #e8ecf0;
