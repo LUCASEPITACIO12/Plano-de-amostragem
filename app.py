@@ -82,68 +82,58 @@ with st.sidebar:
                 return str(p)
         return None
 
-    # Fundo estilizado via CSS injetado
+    # CSS da sidebar – fundo branco limpo, sem alterar cores de texto
     st.markdown("""
     <style>
     [data-testid="stSidebar"] > div:first-child {
-        background: linear-gradient(180deg, #0d2d1f 0%, #1a3a5c 60%, #112233 100%);
+        background: #ffffff;
     }
-    [data-testid="stSidebar"] .stMarkdown p,
-    [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] .stRadio p,
-    [data-testid="stSidebar"] .stCheckbox p,
-    [data-testid="stSidebar"] .stSelectbox label,
-    [data-testid="stSidebar"] .stTextInput label,
-    [data-testid="stSidebar"] .stNumberInput label,
-    [data-testid="stSidebar"] .stTextArea label {
-        color: rgba(255,255,255,0.85) !important;
+    .bloco-header {
+        background: #f0f4f8;
+        border-radius: 12px;
+        padding: 16px 14px 12px;
+        margin-bottom: 12px;
+        border: 1px solid #dde3ea;
+        text-align: center;
     }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
-    [data-testid="stSidebar"] h3 {
-        color: white !important;
+    .bloco-header hr {
+        border: none;
+        border-top: 1px solid #dde3ea;
+        margin: 10px 0;
     }
-    .logo-banner {
-        background: rgba(255,255,255,0.07);
-        border-radius: 10px;
-        padding: 12px 10px 8px;
-        margin-bottom: 6px;
-        border: 1px solid rgba(255,255,255,0.12);
-    }
-    .app-title {
-        color: white;
+    .bloco-header .titulo {
         font-size: 15px;
         font-weight: 700;
-        letter-spacing: .3px;
+        color: #1a3a5c;
         margin: 0;
     }
-    .app-subtitle {
-        color: rgba(255,255,255,0.55);
+    .bloco-header .subtitulo {
         font-size: 10px;
+        color: #6b7a8d;
         margin: 3px 0 0;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # Container visual das logos
-    st.markdown('<div class="logo-banner">', unsafe_allow_html=True)
-
-    # Logos em três colunas
+    # Logos e título dentro de um card cinza claro
     g = logo_path("logo_gvam.png") or logo_path("logo GVAM - sem o fundo branco.png")
     s = logo_path("logo_suvisa.png") or logo_path("logo suvisa.png")
     a = logo_path("logo_alagoas.png") or logo_path("logo alagoas.png")
 
-    col_g, col_s, col_a = st.columns([3, 1.2, 2])
-    if g:
-        col_g.image(g, use_container_width=True)
-    if s:
-        col_s.image(s, use_container_width=True)
-    if a:
-        col_a.image(a, use_container_width=True)
+    st.markdown('<div class="bloco-header">', unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    # Logos lado a lado
+    col_g, col_s, col_a = st.columns([3, 1.2, 2.2])
+    if g: col_g.image(g, use_container_width=True)
+    if s: col_s.image(s, use_container_width=True)
+    if a: col_a.image(a, use_container_width=True)
 
-    st.markdown('<p class="app-title">💧 Plano de Amostragem</p>', unsafe_allow_html=True)
-    st.markdown('<p class="app-subtitle">Portaria GM/MS nº 888/2021 · SESAU-AL / GVAM</p>', unsafe_allow_html=True)
+    st.markdown("""
+        <hr>
+        <p class="titulo">💧 Plano de Amostragem</p>
+        <p class="subtitulo">Portaria GM/MS nº 888/2021 · SESAU-AL / GVAM</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.divider()
 
