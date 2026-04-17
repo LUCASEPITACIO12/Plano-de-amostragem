@@ -200,6 +200,14 @@ class Sistema:
     rt_nome: str = ""                  # responsável técnico habilitado
     rt_conselho: str = "CREA"          # conselho: CREA | CRQ | CRT | Outro
     rt_registro: str = ""              # número de registro no conselho
+
+    # Responsabilidade pela distribuição (quando diferente do tratamento)
+    empresa_distribuicao: str = ""
+    responsavel_distribuicao: str = ""
+    rt_dist_nome: str = ""
+    rt_dist_conselho: str = "CREA"
+    rt_dist_registro: str = ""
+
     latitude: str = ""
     longitude: str = ""
     obs: str = ""
@@ -269,6 +277,10 @@ class Captacao:
     @property
     def is_superficial(self) -> bool:
         return "superficial" in self.tipo.lower()
+
+    @property
+    def label_tipo(self) -> str:
+        return "Superficial" if self.is_superficial else "Subterrâneo"
 
 
 
