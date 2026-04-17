@@ -215,7 +215,7 @@ with st.sidebar:
         with col_t1:
             tipo = st.selectbox("Tipo de sistema", ["SAA", "SAC"])
         with col_t2:
-            manancial = st.selectbox("Manancial", ["Superficial", "Subterrâneo"])
+            manancial = st.selectbox("Manancial", ["Superficial", "Subterrâneo", "Misto (Superficial + Subterrâneo)"])
 
         if escopo != "dist":
             tratamento = st.selectbox("Tipo de tratamento", [
