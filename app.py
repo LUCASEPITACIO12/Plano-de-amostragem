@@ -491,15 +491,21 @@ for s in sistemas:
 
             # Agrupar por parâmetro único (evitar repetir filtro por filtro)
             if etapa == "Saída por Filtro":
-                # Mostrar resumo
-                n_f = len(set(l.ponto_desc for l in lins))
-                freq_f = lins[0].frequencia if lins else "–"
-                st.info(
-                    f"**Turbidez** – {freq_f} em cada um dos {n_f} filtros "
-                    f"(Anexo 2). Monitoramento operacional – não conta no total de laboratório.",
-                    icon="🔬",
-                )
-                continue
+    n_f = len(set(l.ponto_desc for l in lins))
+    ex = lins[0]
+    rows_filtro = [{
+        "Parâmetro": "Turbidez",
+        "Grupo": "🔵 FQ e Microbiológico",
+        "Frequência": ex.frequencia,
+        "Qtd/evento": f"{int(s.horas_funcionamento/2)}×/dia",
+        "Total/mês (média)": ex.quantidade_no_mes(1),
+        "Total/ano × filtro": ex.total_anual,
+        "Total/ano (todos filtros)": ex.total_anual * n_f,
+        "Base Legal": ex.base_legal,
+    }]
+    st.caption(f"📋 {n_f} unidade(s) filtrante(s) — monitoramento individual por filtro (Anexo 2)")
+    st.dataframe(pd.DataFrame(rows_filtro), hide_index=True, use_container_width=True)
+    continue
 
             # Agrupar por parâmetro + frequência para exibição limpa
             grupos_vis: dict = {}
