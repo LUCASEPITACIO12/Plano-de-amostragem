@@ -71,8 +71,15 @@ if "sistema_editando" not in st.session_state:
 
 # ── Sidebar – cadastro de sistemas ───────────────────────────────────────────
 with st.sidebar:
-    st.image("https://via.placeholder.com/40x40/1f3864/ffffff?text=💧",
-             width=40)
+    # ── Logos ──────────────────────────────────────────────────────────────
+    col_l1, col_l2, col_l3 = st.columns([2, 1, 2])
+    with col_l1:
+        st.image("assets/logo GVAM - sem o fundo branco.png.png", use_container_width=True)
+    with col_l2:
+        st.image("assets/logo suvisa.png", use_container_width=True)
+    with col_l3:
+        st.image("assets/logo alagoas.png", use_container_width=True)
+
     st.title("Plano de Amostragem")
     st.caption("Portaria GM/MS nº 888/2021 | SESAU-AL")
     st.divider()
