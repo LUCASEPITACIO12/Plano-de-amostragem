@@ -72,71 +72,79 @@ if "sistema_editando" not in st.session_state:
 # ── Sidebar – cadastro de sistemas ───────────────────────────────────────────
 with st.sidebar:
     # ── Header com logos ────────────────────────────────────────────────────
-    import base64, pathlib
+    import pathlib
 
-    def _b64(name):
-        p = pathlib.Path("assets") / name
-        if p.exists():
-            return base64.b64encode(p.read_bytes()).decode()
-        return ""
+    def logo_path(name):
+        """Tenta nomes com underscore e com espaço."""
+        for n in [name, name.replace("_", " ")]:
+            p = pathlib.Path("assets") / n
+            if p.exists():
+                return str(p)
+        return None
 
-    # Tenta nomes com underline primeiro, depois com espaço (compatibilidade GitHub)
-    gvam_b64   = _b64("logo_gvam.png")   or _b64("logo GVAM - sem o fundo branco.png")
-    suvisa_b64 = _b64("logo_suvisa.png") or _b64("logo suvisa.png")
-    al_b64     = _b64("logo_alagoas.png")or _b64("logo alagoas.png")
-
-    def img_tag(b64, ext="png", h=52):
-        if b64:
-            return f'<img src="data:image/{ext};base64,{b64}" style="height:{h}px;object-fit:contain;">'
-        return ""
-
-    st.markdown(f"""
-    <div style="
-        background: linear-gradient(160deg, #0d2d1f 0%, #1a3a5c 100%);
-        border-radius: 14px;
-        padding: 20px 16px 16px;
-        margin-bottom: 4px;
-    ">
-        <!-- Logo GVAM centralizada e grande -->
-        <div style="text-align:center; margin-bottom:14px;">
-            {img_tag(gvam_b64, h=90)}
-        </div>
-
-        <!-- SUVISA e Alagoas lado a lado centralizados -->
-        <div style="
-            display:flex;
-            justify-content:center;
-            align-items:center;
-            gap:16px;
-            padding: 10px 0;
-            border-top: 1px solid rgba(255,255,255,0.15);
-            border-bottom: 1px solid rgba(255,255,255,0.15);
-            margin-bottom:14px;
-        ">
-            <div style="text-align:center;">
-                {img_tag(suvisa_b64, h=52)}
-                <div style="color:rgba(255,255,255,0.75); font-size:10px; margin-top:4px; letter-spacing:.5px; text-transform:uppercase;">SUVISA</div>
-            </div>
-            <div style="width:1px; height:50px; background:rgba(255,255,255,0.2);"></div>
-            <div style="text-align:center;">
-                {img_tag(al_b64, h=44)}
-            </div>
-        </div>
-
-        <!-- Título e subtítulo -->
-        <div style="text-align:center;">
-            <div style="color:white; font-size:15px; font-weight:700; letter-spacing:.4px;">
-                💧 Plano de Amostragem
-            </div>
-            <div style="color:rgba(255,255,255,0.6); font-size:11px; margin-top:4px;">
-                Portaria GM/MS nº 888/2021
-            </div>
-            <div style="color:rgba(255,255,255,0.5); font-size:10px; margin-top:2px;">
-                SESAU-AL · GVAM / SUVISA
-            </div>
-        </div>
-    </div>
+    # Fundo estilizado via CSS injetado
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] > div:first-child {
+        background: linear-gradient(180deg, #0d2d1f 0%, #1a3a5c 60%, #112233 100%);
+    }
+    [data-testid="stSidebar"] .stMarkdown p,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] .stRadio p,
+    [data-testid="stSidebar"] .stCheckbox p,
+    [data-testid="stSidebar"] .stSelectbox label,
+    [data-testid="stSidebar"] .stTextInput label,
+    [data-testid="stSidebar"] .stNumberInput label,
+    [data-testid="stSidebar"] .stTextArea label {
+        color: rgba(255,255,255,0.85) !important;
+    }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3 {
+        color: white !important;
+    }
+    .logo-banner {
+        background: rgba(255,255,255,0.07);
+        border-radius: 10px;
+        padding: 12px 10px 8px;
+        margin-bottom: 6px;
+        border: 1px solid rgba(255,255,255,0.12);
+    }
+    .app-title {
+        color: white;
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: .3px;
+        margin: 0;
+    }
+    .app-subtitle {
+        color: rgba(255,255,255,0.55);
+        font-size: 10px;
+        margin: 3px 0 0;
+    }
+    </style>
     """, unsafe_allow_html=True)
+
+    # Container visual das logos
+    st.markdown('<div class="logo-banner">', unsafe_allow_html=True)
+
+    # Logos em três colunas
+    g = logo_path("logo_gvam.png") or logo_path("logo GVAM - sem o fundo branco.png")
+    s = logo_path("logo_suvisa.png") or logo_path("logo suvisa.png")
+    a = logo_path("logo_alagoas.png") or logo_path("logo alagoas.png")
+
+    col_g, col_s, col_a = st.columns([3, 1.2, 2])
+    if g:
+        col_g.image(g, use_container_width=True)
+    if s:
+        col_s.image(s, use_container_width=True)
+    if a:
+        col_a.image(a, use_container_width=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<p class="app-title">💧 Plano de Amostragem</p>', unsafe_allow_html=True)
+    st.markdown('<p class="app-subtitle">Portaria GM/MS nº 888/2021 · SESAU-AL / GVAM</p>', unsafe_allow_html=True)
+
     st.divider()
 
     st.subheader("➕ Cadastrar Sistema")
