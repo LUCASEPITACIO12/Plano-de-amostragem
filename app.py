@@ -82,58 +82,17 @@ with st.sidebar:
                 return str(p)
         return None
 
-    # CSS da sidebar – fundo branco limpo, sem alterar cores de texto
-    st.markdown("""
-    <style>
-    [data-testid="stSidebar"] > div:first-child {
-        background: #ffffff;
-    }
-    .bloco-header {
-        background: #f0f4f8;
-        border-radius: 12px;
-        padding: 16px 14px 12px;
-        margin-bottom: 12px;
-        border: 1px solid #dde3ea;
-        text-align: center;
-    }
-    .bloco-header hr {
-        border: none;
-        border-top: 1px solid #dde3ea;
-        margin: 10px 0;
-    }
-    .bloco-header .titulo {
-        font-size: 15px;
-        font-weight: 700;
-        color: #1a3a5c;
-        margin: 0;
-    }
-    .bloco-header .subtitulo {
-        font-size: 10px;
-        color: #6b7a8d;
-        margin: 3px 0 0;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # Logos e título dentro de um card cinza claro
+    # Sidebar – logos compactas + título
     g = logo_path("logo_gvam.png") or logo_path("logo GVAM - sem o fundo branco.png")
     s = logo_path("logo_suvisa.png") or logo_path("logo suvisa.png")
     a = logo_path("logo_alagoas.png") or logo_path("logo alagoas.png")
 
-    st.markdown('<div class="bloco-header">', unsafe_allow_html=True)
-
-    # Logos lado a lado
     col_g, col_s, col_a = st.columns([3, 1.2, 2.2])
     if g: col_g.image(g, use_container_width=True)
     if s: col_s.image(s, use_container_width=True)
     if a: col_a.image(a, use_container_width=True)
 
-    st.markdown("""
-        <hr>
-        <p class="titulo">💧 Plano de Amostragem</p>
-        <p class="subtitulo">Portaria GM/MS nº 888/2021 · SESAU-AL / GVAM</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.caption("Portaria GM/MS nº 888/2021 · SESAU-AL / GVAM")
 
     st.divider()
 
@@ -376,7 +335,13 @@ with st.sidebar:
             st.rerun()
 
 # ── Área principal ────────────────────────────────────────────────────────────
-st.title("💧 Plano de Amostragem – Portaria 888/2021")
+# Banner principal
+import pathlib as _pl
+_capa = _pl.Path("assets/capa.png")
+if _capa.exists():
+    st.image(str(_capa), use_container_width=True)
+else:
+    st.title("💧 Plano de Amostragem – Portaria 888/2021")
 
 if not st.session_state.sistemas:
     st.markdown("""
