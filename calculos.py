@@ -190,35 +190,71 @@ class Sistema:
     desinfetante: str = "Hipoclorito de Sodio (NaOCl)"
     oxidante_preox: str = "Nao realiza pre-oxidacao"
 
-    # Identificação
-    responsavel: str = ""
-    rt_nome: str = ""
-    rt_registro: str = ""
+    # Funcionamento
+    horas_funcionamento: float = 24.0  # horas/dia de operação (afeta cálculo de amostras 2h)
+    nome_eta: str = ""                 # nome da ETA / unidade de tratamento
+
+    # Responsabilidade
+    empresa_responsavel: str = ""      # empresa responsável pelo tratamento
+    responsavel_tratamento: str = ""   # pessoa responsável pelo tratamento (operador)
+    rt_nome: str = ""                  # responsável técnico habilitado
+    rt_conselho: str = "CREA"          # conselho: CREA | CRQ | CRT | Outro
+    rt_registro: str = ""              # número de registro no conselho
     latitude: str = ""
     longitude: str = ""
     obs: str = ""
 
 
+# Dias por mês (ano não bissexto como base)
+_DIAS_MES = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+
 @dataclass
 class LinhaPlano:
     """Uma linha do plano de amostragem (ponto × parâmetro × frequência)."""
-    etapa: str          # Captação / Saída Filtro / Saída Tratamento / Rede
-    grupo: str          # Físico-Químico e Microbiológico / Demais Parâmetros / …
+    etapa: str
+    grupo: str
     parametro: str
-    ponto_tipo: str     # Rede / Ponto de Entrega / Reservatório / Captação
-    ponto_desc: str     # descrição do ponto
-    frequencia: str     # Mensal / Bimestral / …
-    quantidade: int     # amostras por evento de frequência
-    meses_coleta: list  # lista de 1..12 com os meses de coleta
+    ponto_tipo: str
+    ponto_desc: str
+    frequencia: str
+    quantidade: int        # amostras por evento (ou por dia para freq. 2h)
+    meses_coleta: list     # lista de 1..12 com os meses de coleta
     base_legal: str
     obs_ponto: str = ""
+    horas_dia: float = 24.0  # horas/dia de operação (usado para freq. 2h)
+
+    @property
+    def is_operacional(self) -> bool:
+        """Parâmetros operacionais: 'A cada 2 horas' ou 'Diário'."""
+        return self.frequencia in ("A cada 2 horas", "Diário")
+
+    def _amostras_2h_no_mes(self, mes: int) -> int:
+        """Calcula amostras 2h baseado nas horas/dia de operação."""
+        if mes not in self.meses_coleta:
+            return 0
+        dias = _DIAS_MES[mes - 1]
+        return int(self.horas_dia / 2) * dias
+
+    def _amostras_diario_no_mes(self, mes: int) -> int:
+        if mes not in self.meses_coleta:
+            return 0
+        return _DIAS_MES[mes - 1]
 
     @property
     def total_anual(self) -> int:
+        if self.frequencia == "A cada 2 horas":
+            return sum(self._amostras_2h_no_mes(m) for m in self.meses_coleta)
+        if self.frequencia == "Diário":
+            return sum(self._amostras_diario_no_mes(m) for m in self.meses_coleta)
         return self.quantidade * len(self.meses_coleta)
 
     def quantidade_no_mes(self, mes: int) -> int:
         """Retorna quantas amostras coletar num mês específico (1-12)."""
+        if self.frequencia == "A cada 2 horas":
+            return self._amostras_2h_no_mes(mes)
+        if self.frequencia == "Diário":
+            return self._amostras_diario_no_mes(mes)
         return self.quantidade if mes in self.meses_coleta else 0
 
 @dataclass
@@ -457,6 +493,7 @@ def gerar_plano(s: Sistema) -> list[LinhaPlano]:
                 frequencia="A cada 2 horas",
                 quantidade=1,
                 meses_coleta=list(range(1, 13)),
+                    horas_dia=s.horas_funcionamento,
                 base_legal="Anexo 13",
                 obs_ponto="Monitoramento operacional",
             ))
