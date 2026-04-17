@@ -159,9 +159,22 @@ class Sistema:
     # "completo"  = captação + tratamento + distribuição
     # "trat_dist" = tratamento + distribuição (recebe água bruta de terceiro)
     # "dist"      = somente distribuição (recebe água já tratada)
+    # Lista de pontos de captação – cada um com nome, tipo e coordenadas
+    captacoes: list = None  # list[Captacao] – preenchida no __post_init__
+
     escopo: str = "completo"
 
     tipo: str = "SAA"            # SAA | SAC
+
+    def __post_init__(self):
+        """Garante que captacoes seja sempre uma lista, nunca None."""
+        if self.captacoes is None:
+            # Retrocompatibilidade: se não informou captacoes, cria uma genérica
+            self.captacoes = [Captacao(
+                nome="Captação – " + self.nome,
+                tipo=self.manancial,
+            )]
+
     manancial: str = "Superficial"  # Superficial | Subterrâneo
     tratamento: str = "ETA Convencional (Filtração Rápida)"
     n_filtros: int = 0
@@ -207,6 +220,21 @@ class LinhaPlano:
     def quantidade_no_mes(self, mes: int) -> int:
         """Retorna quantas amostras coletar num mês específico (1-12)."""
         return self.quantidade if mes in self.meses_coleta else 0
+
+@dataclass
+class Captacao:
+    """Um ponto de captação individual (poço, nascente, rio, açude)."""
+    nome: str                    # Nome/ID dado pela concessão: ex. "Poço PZA-01", "Rio São Francisco"
+    tipo: str = "Subterrâneo"   # "Superficial" | "Subterrâneo"
+    latitude: str = ""
+    longitude: str = ""
+    obs: str = ""
+
+    @property
+    def is_superficial(self) -> bool:
+        return "superficial" in self.tipo.lower()
+
+
 
 
 # ── Funções de cálculo ────────────────────────────────────────────────────────
@@ -298,67 +326,82 @@ def gerar_plano(s: Sistema) -> list[LinhaPlano]:
     nome_sis = f"{s.municipio} – {s.nome}"
 
     # ── 1. CAPTAÇÃO / ÁGUA BRUTA ─────────────────────────────────────────────
+    # Itera sobre cada ponto de captação individualmente.
+    # Cada poço ou manancial recebe seu conjunto de parâmetros conforme o tipo.
+    # Art. 42 §1º (superficial) e §2º (subterrâneo) – aplicados por ponto.
     if has_cap:
-        ponto_cap = f"Captação – {nome_sis}"
+        tem_sup = any(c.is_superficial for c in s.captacoes)
+        for cap in s.captacoes:
+            desc = f"{cap.nome} – {nome_sis}"
+            base_art42 = "Art. 42 §1º" if cap.is_superficial else "Art. 42 §2º"
+            base_ecoli  = "Art. 29" if cap.is_superficial else "Art. 31 §5º"
 
-        linhas.append(LinhaPlano(
-            etapa="Água Bruta – Captação",
-            grupo="Físico-Químico e Microbiológico",
-            parametro="Escherichia coli",
-            ponto_tipo="Captação",
-            ponto_desc=ponto_cap,
-            frequencia="Mensal",
-            quantidade=1,
-            meses_coleta=list(range(1, 13)),
-            base_legal="Art. 29 / Art. 31 §5º",
-            obs_ponto="1 amostra/mês por ponto de captação",
-        ))
-
-        params_bruta_fq = ["Turbidez", "Cor aparente", "pH",
-                           "Fósforo Total", "Nitrogênio Amoniacal Total"]
-        if is_sup:
-            params_bruta_fq += ["DQO", "DBO", "OD"]
-        else:
-            params_bruta_fq += ["Condutividade Elétrica"]
-
-        for param in params_bruta_fq:
+            # E. coli – mensal em toda captação
             linhas.append(LinhaPlano(
                 etapa="Água Bruta – Captação",
                 grupo="Físico-Químico e Microbiológico",
-                parametro=param,
+                parametro="Escherichia coli",
                 ponto_tipo="Captação",
-                ponto_desc=ponto_cap,
+                ponto_desc=desc,
+                frequencia="Mensal",
+                quantidade=1,
+                meses_coleta=list(range(1, 13)),
+                base_legal=base_ecoli,
+                obs_ponto=cap.tipo,
+            ))
+
+            # Parâmetros semestrais comuns a ambos os tipos
+            params_comuns = ["Turbidez", "Cor aparente", "pH",
+                             "Fósforo Total", "Nitrogênio Amoniacal Total"]
+
+            # Parâmetros específicos por tipo de manancial
+            if cap.is_superficial:
+                params_extra = ["DQO", "DBO", "OD"]
+            else:
+                params_extra = ["Condutividade Elétrica"]
+
+            for param in params_comuns + params_extra:
+                linhas.append(LinhaPlano(
+                    etapa="Água Bruta – Captação",
+                    grupo="Físico-Químico e Microbiológico",
+                    parametro=param,
+                    ponto_tipo="Captação",
+                    ponto_desc=desc,
+                    frequencia="Semestral",
+                    quantidade=1,
+                    meses_coleta=MESES_SEMESTRAL,
+                    base_legal=base_art42,
+                    obs_ponto=cap.tipo,
+                ))
+
+            # Inorgânicos, Orgânicos e Agrotóxicos – semestral em toda captação
+            linhas.append(LinhaPlano(
+                etapa="Água Bruta – Captação",
+                grupo="Demais Parâmetros",
+                parametro="Inorgânicos, Orgânicos e Agrotóxicos (Anexo 9)",
+                ponto_tipo="Captação",
+                ponto_desc=desc,
                 frequencia="Semestral",
                 quantidade=1,
                 meses_coleta=MESES_SEMESTRAL,
-                base_legal="Art. 42 §1º" if is_sup else "Art. 42 §2º",
+                base_legal=base_art42,
+                obs_ponto=cap.tipo,
             ))
 
-        linhas.append(LinhaPlano(
-            etapa="Água Bruta – Captação",
-            grupo="Demais Parâmetros",
-            parametro="Inorgânicos, Orgânicos e Agrotóxicos (Anexo 9)",
-            ponto_tipo="Captação",
-            ponto_desc=ponto_cap,
-            frequencia="Semestral",
-            quantidade=1,
-            meses_coleta=MESES_SEMESTRAL,
-            base_legal="Art. 42 §1º / §2º",
-        ))
-
-        if is_sup:
-            linhas.append(LinhaPlano(
-                etapa="Água Bruta – Captação",
-                grupo="Biológico / Cianobactérias",
-                parametro="Cianobactérias / Clorofila-a",
-                ponto_tipo="Captação",
-                ponto_desc=ponto_cap,
-                frequencia="Trimestral (→ Semanal se > 10.000 cél/mL)",
-                quantidade=1,
-                meses_coleta=MESES_TRIMESTRAL,
-                base_legal="Art. 43 + Anexo 12",
-                obs_ponto="Frequência aumenta conforme resultado",
-            ))
+            # Cianobactérias / Clorofila-a – somente superficial
+            if cap.is_superficial:
+                linhas.append(LinhaPlano(
+                    etapa="Água Bruta – Captação",
+                    grupo="Biológico / Cianobactérias",
+                    parametro="Cianobactérias / Clorofila-a",
+                    ponto_tipo="Captação",
+                    ponto_desc=desc,
+                    frequencia="Trimestral (→ Semanal se > 10.000 cél/mL)",
+                    quantidade=1,
+                    meses_coleta=MESES_TRIMESTRAL,
+                    base_legal="Art. 43 + Anexo 12",
+                    obs_ponto="Frequência aumenta conforme resultado",
+                ))
 
     # ── 2. SAÍDA POR FILTRO ───────────────────────────────────────────────────
     if has_trat and s.n_filtros > 0:
@@ -381,7 +424,10 @@ def gerar_plano(s: Sistema) -> list[LinhaPlano]:
     # ── 3. SAÍDA DO TRATAMENTO ────────────────────────────────────────────────
     if has_trat:
         ponto_saida = f"Saída do Tratamento – {nome_sis}"
-        freq_coli, qtd_coli = freq_coliformes_saida(s.manancial)
+        # Frequência da saída usa o manancial mais exigente:
+        # se qualquer captação for superficial, aplica 2x/semana
+        man_saida = "Superficial" if any(c.is_superficial for c in s.captacoes) else "Subterrâneo"
+        freq_coli, qtd_coli = freq_coliformes_saida(man_saida)
 
         for param in ["Coliformes totais", "Escherichia coli"]:
             linhas.append(LinhaPlano(
