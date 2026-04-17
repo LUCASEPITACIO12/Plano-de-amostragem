@@ -79,6 +79,57 @@ with st.sidebar:
 
     st.subheader("➕ Cadastrar Sistema")
 
+    # ── Captações – fora do form (botões não funcionam dentro de st.form) ──────
+    if "captacoes_form" not in st.session_state:
+        st.session_state["captacoes_form"] = [{"nome": "", "tipo": "Subterraneo"}]
+
+    escopo_atual = st.session_state.get("escopo_tmp", "completo")
+    if escopo_atual == "completo":
+        st.markdown("**Pontos de captação**")
+        st.caption("Cadastre cada poço, nascente ou tomada d'água. O plano sai com o nome real de cada ponto.")
+
+        captacoes_form = st.session_state["captacoes_form"]
+        for idx_c in range(len(captacoes_form)):
+            col_n, col_t, col_del = st.columns([4, 2, 1])
+            with col_n:
+                captacoes_form[idx_c]["nome"] = st.text_input(
+                    f"Nome / ID do ponto {idx_c+1}",
+                    value=captacoes_form[idx_c].get("nome", ""),
+                    placeholder="Ex: Poço PZA-01 / Rio São Francisco",
+                    key=f"cap_nome_{idx_c}",
+                )
+            with col_t:
+                opts = ["Subterraneo", "Superficial"]
+                cur  = captacoes_form[idx_c].get("tipo", "Subterraneo")
+                captacoes_form[idx_c]["tipo"] = st.selectbox(
+                    "Tipo", opts,
+                    index=opts.index(cur) if cur in opts else 0,
+                    key=f"cap_tipo_{idx_c}",
+                )
+            with col_del:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("✕", key=f"del_cap_{idx_c}",
+                             help="Remover este ponto",
+                             disabled=len(captacoes_form) == 1):
+                    st.session_state["captacoes_form"].pop(idx_c)
+                    st.rerun()
+
+        col_add, _ = st.columns([2, 4])
+        with col_add:
+            if st.button("＋ Adicionar ponto de captação", key="add_cap"):
+                st.session_state["captacoes_form"].append({"nome": "", "tipo": "Subterraneo"})
+                st.rerun()
+
+        n_sup = sum(1 for c in captacoes_form if c.get("tipo") == "Superficial")
+        n_sub = sum(1 for c in captacoes_form if c.get("tipo") == "Subterraneo")
+        if n_sup > 0 and n_sub > 0:
+            st.info(
+                f"Sistema misto: {n_sup} ponto(s) superficial(is) + {n_sub} subterrâneo(s). "
+                "Os parâmetros de cada ponto serão gerados conforme o tipo.",
+                icon="ℹ️",
+            )
+
+    st.divider()
     with st.form("form_sistema", clear_on_submit=True):
 
         # ── Identificação ────────────────────────────────────────────────────
@@ -104,6 +155,7 @@ with st.sidebar:
             ),
         )
 
+        st.session_state["escopo_tmp"] = escopo
         if escopo == "dist":
             st.info(
                 "⚠️ A concessão monitora apenas a rede. O responsável pelo "
@@ -162,63 +214,7 @@ with st.sidebar:
         with col_p2:
             n_ligacoes = st.number_input("No de ligacoes ativas", 0, 500_000, 0, step=10)
 
-        # ── Captacoes ─────────────────────────────────────────────────────────
-        if escopo == "completo":
-            st.markdown("**Pontos de captacao**")
-            st.caption(
-                "Cadastre cada poco, nascente ou tomada de agua individualmente. "
-                "O plano sai com o nome real de cada ponto."
-            )
-
-            # Session state para captacoes desta sessao do formulario
-            form_key = "captacoes_form"
-            if form_key not in st.session_state:
-                st.session_state[form_key] = [
-                    {"nome": "", "tipo": "Subterraneo"}
-                ]
-
-            captacoes_form = st.session_state[form_key]
-
-            for idx_c, cap in enumerate(captacoes_form):
-                col_n, col_t, col_del = st.columns([4, 2, 1])
-                with col_n:
-                    cap["nome"] = st.text_input(
-                        f"Nome / ID do ponto {idx_c+1}",
-                        value=cap.get("nome", ""),
-                        placeholder="Ex: Poco PZA-01 / Rio Sao Francisco",
-                        key=f"cap_nome_{idx_c}",
-                    )
-                with col_t:
-                    cap["tipo"] = st.selectbox(
-                        "Tipo",
-                        ["Subterraneo", "Superficial"],
-                        index=0 if cap.get("tipo","Subterraneo")=="Subterraneo" else 1,
-                        key=f"cap_tipo_{idx_c}",
-                    )
-                with col_del:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("x", key=f"del_cap_{idx_c}",
-                                 help="Remover este ponto",
-                                 disabled=len(captacoes_form) == 1):
-                        captacoes_form.pop(idx_c)
-                        st.rerun()
-
-            if st.button("+ Adicionar captacao", key="add_cap"):
-                captacoes_form.append({"nome": "", "tipo": "Subterraneo"})
-                st.rerun()
-
-            # Contagem por tipo para info
-            n_sup = sum(1 for c in captacoes_form if c.get("tipo") == "Superficial")
-            n_sub = sum(1 for c in captacoes_form if c.get("tipo") == "Subterraneo")
-            if n_sup > 0 and n_sub > 0:
-                st.info(
-                    f"Sistema misto: {n_sup} captacao(es) superficial(is) + "
-                    f"{n_sub} subterranea(s). "
-                    "Os parametros de cada ponto serao gerados conforme o tipo.",
-                    icon="INFO",
-                )
-        else:
-            captacoes_form = []
+        captacoes_form = st.session_state.get("captacoes_form", [])
 
         # ── Condicionais ─────────────────────────────────────────────────────
         if escopo != "dist":
@@ -294,8 +290,9 @@ with st.sidebar:
                 obs=obs,
             )
             st.session_state.sistemas.append(s)
-            if "captacoes_form" in st.session_state:
-                del st.session_state["captacoes_form"]
+            st.session_state["captacoes_form"] = [{"nome": "", "tipo": "Subterraneo"}]
+            if "escopo_tmp" in st.session_state:
+                del st.session_state["escopo_tmp"]
             st.success(f"Sistema **{nome_sis}** ({municipio}) adicionado!")
             st.rerun()
 
