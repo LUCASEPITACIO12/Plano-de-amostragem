@@ -74,16 +74,17 @@ with st.sidebar:
     # ── Header com logos ────────────────────────────────────────────────────
     import base64, pathlib
 
-    def _b64(name):
-        p = pathlib.Path("assets") / name
-        if p.exists():
-            return base64.b64encode(p.read_bytes()).decode()
-        return ""
+BASE_DIR = Path(__file__).resolve().parent
 
-    # Tenta nomes com underline primeiro, depois com espaço (compatibilidade GitHub)
-    gvam_b64   = _b64("logo_gvam.png")   or _b64("logo GVAM - sem o fundo branco.png")
-    suvisa_b64 = _b64("logo_suvisa.png") or _b64("logo suvisa.png")
-    al_b64     = _b64("logo_alagoas.png")or _b64("logo alagoas.png")
+def _b64(name):
+    p = BASE_DIR / "assets" / name
+    if p.exists():
+        return base64.b64encode(p.read_bytes()).decode()
+    return ""
+
+gvam_b64 = _b64("logo_gvam.png")
+suvisa_b64 = _b64("logo_suvisa.png")
+al_b64 = _b64("logo_alagoas.png")
 
     def img_tag(b64, ext="png", h=52):
         if b64:
