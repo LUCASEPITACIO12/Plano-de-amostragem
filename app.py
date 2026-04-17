@@ -24,7 +24,7 @@ st.set_page_config(
 st.markdown("""
 <style>
 [data-testid="stAppViewContainer"] { background: #f8f9fb; }
-[data-testid="stSidebar"] { background: linear-gradient(180deg, #e8f4f0 0%, #deeef8 50%, #eaf0f8 100%); border-right: 1px solid #c8dcea; }
+[data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid #e8ecf0; }
 .metric-card {
     background: #ffffff;
     border: 1px solid #e8ecf0;
@@ -76,7 +76,7 @@ with st.sidebar:
 
 
     # Sidebar – só título e subtítulo
-    st.markdown("### Plano de Amostragem")
+    st.markdown("### 💧 Plano de Amostragem")
     st.caption("Portaria GM/MS nº 888/2021 · SESAU-AL / GVAM")
 
     st.divider()
@@ -235,15 +235,52 @@ with st.sidebar:
             fluoretacao = pre_oxidacao = False
             acrilamida = epicloridrina = rede_pvc = False
 
-        # ── Responsável técnico ──────────────────────────────────────────────
-        st.markdown("**Responsável técnico**")
-        responsavel = st.text_input("Responsável pelo tratamento",
-                                     placeholder="Ex: CASAL")
-        col_r1, col_r2 = st.columns(2)
+        # ── ETA / Unidade de tratamento ──────────────────────────────────────
+        if escopo != "dist":
+            nome_eta = st.text_input(
+                "ETA / Unidade de tratamento",
+                placeholder="Ex: ETA Morro do Gaia / UTS Ilha das Canas",
+            )
+        else:
+            nome_eta = ""
+
+        # ── Funcionamento ─────────────────────────────────────────────────────
+        if escopo != "dist":
+            st.markdown("**Funcionamento**")
+            col_h1, col_h2 = st.columns([2, 3])
+            with col_h1:
+                horas_op = st.selectbox(
+                    "Horas de operação por dia",
+                    ["24 horas (contínuo)", "20 horas", "18 horas",
+                     "16 horas", "12 horas", "8 horas", "Outro"],
+                    help="Afeta o cálculo de amostras monitoradas a cada 2 horas (turbidez, pH, cor, cloro)",
+                )
+            with col_h2:
+                if horas_op == "Outro":
+                    horas_num = st.number_input("Informe as horas/dia", 1.0, 24.0, 24.0, step=0.5)
+                else:
+                    horas_num = float(horas_op.split()[0])
+        else:
+            horas_num = 24.0
+
+        # ── Responsabilidade ─────────────────────────────────────────────────
+        st.markdown("**Responsabilidade**")
+        empresa_responsavel = st.text_input(
+            "Empresa responsável pelo tratamento",
+            placeholder="Ex: SAAE Penedo / Agreste Saneamento",
+        )
+        responsavel_tratamento = st.text_input(
+            "Pessoa responsável pelo tratamento (operador)",
+            placeholder="Ex: João da Silva",
+        )
+        col_r1, col_r2, col_r3 = st.columns([2, 1, 2])
         with col_r1:
-            rt_nome = st.text_input("RT – Nome completo")
+            rt_nome = st.text_input("Responsável Técnico Habilitado",
+                                    placeholder="Nome completo")
         with col_r2:
-            rt_reg  = st.text_input("RT – Nº registro (CREA/CRQ)")
+            rt_conselho = st.selectbox("Conselho", ["CREA", "CRQ", "CRT", "Outro"])
+        with col_r3:
+            rt_reg = st.text_input("Nº de registro", placeholder="Ex: 12345-D/AL")
 
         col_geo1, col_geo2 = st.columns(2)
         with col_geo1:
@@ -286,8 +323,12 @@ with st.sidebar:
                 rede_pvc=rede_pvc,
                 desinfetante=desinfetante,
                 oxidante_preox=oxidante_preox,
-                responsavel=responsavel,
+                nome_eta=nome_eta,
+                horas_funcionamento=horas_num,
+                empresa_responsavel=empresa_responsavel,
+                responsavel_tratamento=responsavel_tratamento,
                 rt_nome=rt_nome,
+                rt_conselho=rt_conselho,
                 rt_registro=rt_reg,
                 latitude=lat,
                 longitude=lon,
@@ -309,6 +350,8 @@ with st.sidebar:
             with col_l:
                 st.caption(f"**{s.municipio}** – {s.nome}")
                 st.caption(f"Pop.: {s.populacao:,} | {s.manancial} | {s.escopo}")
+                if s.empresa_responsavel:
+                    st.caption(f"🏢 {s.empresa_responsavel}")
             with col_r:
                 if st.button("🗑️", key=f"del_{i}", help="Remover"):
                     st.session_state.sistemas.pop(i)
@@ -429,6 +472,8 @@ for s in sistemas:
         # Métricas do sistema
         mc1, mc2, mc3, mc4 = st.columns(4)
         mc1.metric("Pontos mínimos rede (Anx.14)", res["n_pontos_rede"])
+        if s.nome_eta:
+            st.caption(f"🏭 ETA: {s.nome_eta}  |  ⏱ {s.horas_funcionamento:.0f}h/dia de operação")
         mc2.metric("Faixa populacional", res["faixa"])
         mc3.metric("Amostras/ano (lab.)", f"{res['total_amostras_ano']:,}")
         mc4.metric("PSD", f"{res['psd_qtd']} ponto(s) / {res['psd_freq']}")
