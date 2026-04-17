@@ -536,7 +536,7 @@ for s in sistemas:
                 })
 
             if rows_table:
-                df = pd.DataFrame(rows_table)x
+                df = pd.DataFrame(rows_table)
                 st.dataframe(
                     df,
                     hide_index=True,
