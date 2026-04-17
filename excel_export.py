@@ -75,8 +75,8 @@ def aba_resumido(wb, sistemas: list[Sistema], ano: int):
 
     hdrs = [
         "ITEM", "Município", "Localidades", "Sistema",
-        "Tipo de tratamento", "Tipo de captação",
-        "Responsável pelo tratamento", "Responsável Técnico Habilitado",
+        "ETA / Unidade de Tratamento", "Tipo de tratamento", "Tipo de captação",
+        "Empresa Responsável", "Resp. pelo Tratamento", "Responsável Técnico (Conselho/Nº)",
         "Nº TOTAL DE LIGAÇÕES ATIVAS", "Pop. atendida",
         "Escopo responsabilidade",
         "Nº pontos rede (Anx.14)", "Faixa populacional",
@@ -117,9 +117,9 @@ def aba_resumido(wb, sistemas: list[Sistema], ano: int):
         ws.row_dimensions[r].height = 22
 
         row_data = [
-            i + 1, s.municipio, s.localidades, s.nome,
+            i + 1, s.municipio, s.localidades, s.nome, s.nome_eta,
             s.tratamento, s.manancial,
-            s.responsavel, f"{s.rt_nome} | {s.rt_registro}",
+            f"{s.empresa_responsavel}", f"{s.responsavel_tratamento}", f"{s.rt_nome} | {s.rt_conselho} {s.rt_registro}",
             s.n_ligacoes, s.populacao,
             escopo_label.get(s.escopo, s.escopo),
             n_pts, faixa_populacional(s.populacao),
