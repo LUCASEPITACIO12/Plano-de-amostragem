@@ -74,24 +74,9 @@ with st.sidebar:
     # ── Header com logos ────────────────────────────────────────────────────
     import pathlib
 
-    def logo_path(name):
-        """Tenta nomes com underscore e com espaço."""
-        for n in [name, name.replace("_", " ")]:
-            p = pathlib.Path("assets") / n
-            if p.exists():
-                return str(p)
-        return None
 
-    # Sidebar – logos compactas + título
-    g = logo_path("logo_gvam.png") or logo_path("logo GVAM - sem o fundo branco.png")
-    s = logo_path("logo_suvisa.png") or logo_path("logo suvisa.png")
-    a = logo_path("logo_alagoas.png") or logo_path("logo alagoas.png")
-
-    col_g, col_s, col_a = st.columns([3, 1.2, 2.2])
-    if g: col_g.image(g, use_container_width=True)
-    if s: col_s.image(s, use_container_width=True)
-    if a: col_a.image(a, use_container_width=True)
-
+    # Sidebar – só título e subtítulo
+    st.markdown("### 💧 Plano de Amostragem")
     st.caption("Portaria GM/MS nº 888/2021 · SESAU-AL / GVAM")
 
     st.divider()
