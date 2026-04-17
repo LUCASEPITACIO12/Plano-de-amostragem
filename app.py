@@ -523,8 +523,8 @@ for s in sistemas:
                     "Parâmetro":   param,
                     "Grupo":       tag_map.get(grupo, grupo),
                     "Frequência":  freq,
-                    "Qtd/evento":  qtd if l.frequencia not in ("A cada 2 horas","Diário") else "operacional",
-                    "Total/ano":   total if l.frequencia not in ("A cada 2 horas","Diário") else "–",
+                    "Qtd/evento":  qtd if l.frequencia not in ("A cada 2 horas","Diário") else f"{int(s.horas_funcionamento/2)}×/dia",
+                    "Total/ano":   total,
                     "Base Legal":  base,
                 })
 
