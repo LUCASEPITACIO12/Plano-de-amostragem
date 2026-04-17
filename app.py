@@ -92,24 +92,47 @@ with st.sidebar:
 
     st.markdown(f"""
     <div style="
-        background: linear-gradient(135deg, #1a3a5c 0%, #1f5c3a 100%);
-        border-radius: 12px;
-        padding: 16px 18px 12px;
-        margin-bottom: 16px;
+        background: linear-gradient(160deg, #0d2d1f 0%, #1a3a5c 100%);
+        border-radius: 14px;
+        padding: 20px 16px 16px;
+        margin-bottom: 4px;
     ">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-            {img_tag(gvam_b64, h=48)}
-            <div style="display:flex; gap:10px; align-items:center;">
-                {img_tag(suvisa_b64, h=40)}
-                {img_tag(al_b64, h=34)}
+        <!-- Logo GVAM centralizada e grande -->
+        <div style="text-align:center; margin-bottom:14px;">
+            {img_tag(gvam_b64, h=90)}
+        </div>
+
+        <!-- SUVISA e Alagoas lado a lado centralizados -->
+        <div style="
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            gap:16px;
+            padding: 10px 0;
+            border-top: 1px solid rgba(255,255,255,0.15);
+            border-bottom: 1px solid rgba(255,255,255,0.15);
+            margin-bottom:14px;
+        ">
+            <div style="text-align:center;">
+                {img_tag(suvisa_b64, h=52)}
+                <div style="color:rgba(255,255,255,0.75); font-size:10px; margin-top:4px; letter-spacing:.5px; text-transform:uppercase;">SUVISA</div>
+            </div>
+            <div style="width:1px; height:50px; background:rgba(255,255,255,0.2);"></div>
+            <div style="text-align:center;">
+                {img_tag(al_b64, h=44)}
             </div>
         </div>
-        <div style="border-top: 1px solid rgba(255,255,255,0.2); padding-top:10px;">
-            <div style="color:white; font-size:16px; font-weight:600; letter-spacing:.3px;">
+
+        <!-- Título e subtítulo -->
+        <div style="text-align:center;">
+            <div style="color:white; font-size:15px; font-weight:700; letter-spacing:.4px;">
                 💧 Plano de Amostragem
             </div>
-            <div style="color:rgba(255,255,255,0.65); font-size:11px; margin-top:2px;">
-                Portaria GM/MS nº 888/2021 · SESAU-AL / GVAM
+            <div style="color:rgba(255,255,255,0.6); font-size:11px; margin-top:4px;">
+                Portaria GM/MS nº 888/2021
+            </div>
+            <div style="color:rgba(255,255,255,0.5); font-size:10px; margin-top:2px;">
+                SESAU-AL · GVAM / SUVISA
             </div>
         </div>
     </div>
