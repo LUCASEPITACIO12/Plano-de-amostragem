@@ -76,7 +76,7 @@ with st.sidebar:
 
 
     # Sidebar – só título e subtítulo
-    st.markdown("### 💧 Plano de Amostragem")
+    st.markdown("### Plano de Amostragem")
     st.caption("Portaria GM/MS nº 888/2021 · SESAU-AL / GVAM")
 
     st.divider()
