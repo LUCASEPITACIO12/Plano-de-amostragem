@@ -74,7 +74,7 @@ with st.sidebar:
     # ── Logos ──────────────────────────────────────────────────────────────
     col_l1, col_l2, col_l3 = st.columns([2, 1, 2])
     with col_l1:
-        st.image("assets/logo GVAM - sem o fundo branco.png.png", use_container_width=True)
+        st.image("assets/logo GVAM - sem o fundo branco.png", use_container_width=True)
     with col_l2:
         st.image("assets/logo suvisa.png", use_container_width=True)
     with col_l3:
