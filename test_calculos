@@ -1,0 +1,438 @@
+"""
+test_calculos.py
+Roda com: python -m pytest test_calculos.py -v
+ou:        python test_calculos.py
+"""
+import sys
+import pytest
+
+from calculos import (
+    Sistema, Captacao, LinhaPlano,
+    calc_anexo14, calc_psd, calc_params_psd, faixa_populacional,
+    freq_coliformes_saida, freq_turbidez_filtro,
+    gerar_plano, resumo_sistema, validar_sistema,
+    PARAMS_FQ_BASICO, PARAMS_DEMAIS,
+    MESES_BIMESTRAL, MESES_TRIMESTRAL, MESES_SEMESTRAL, MES_ANUAL,
+)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Anexo 14 – pontos mínimos na rede
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestAnexo14:
+    def test_pop_zero(self):
+        assert calc_anexo14(0) == 5
+
+    def test_faixa_minima(self):
+        assert calc_anexo14(2_500) == 5
+
+    def test_faixa_5_10k(self):
+        assert calc_anexo14(7_000) == 10
+
+    def test_faixa_10_50k(self):
+        assert calc_anexo14(30_000) == 30
+        assert calc_anexo14(50_000) == 50
+
+    def test_faixa_50_80k(self):
+        # 25 + ceil(65000/2000) = 25 + 33 = 58
+        assert calc_anexo14(65_000) == 58
+
+    def test_teto_400(self):
+        # O teto 400 só é alcançado em pop muito grande:
+        # 244 + ceil(pop/20.000) ≥ 400 → pop ≥ ~3.120.000
+        # min(400, ...) garante que nunca passa de 400.
+        assert calc_anexo14(50_000_000) == 400
+        assert calc_anexo14(2_000_000) < 400  # ainda na fórmula
+
+    def test_minimo_da_ultima_faixa(self):
+        # Garante que pop bem grande não estoura 400
+        assert calc_anexo14(10_000_000) == 400
+
+    def test_pop_negativa_vira_zero(self):
+        assert calc_anexo14(-100) == 5
+
+
+class TestFaixaPopulacional:
+    def test_strings_legiveis(self):
+        assert "5.000" in faixa_populacional(2_500)
+        assert "máx. 400" in faixa_populacional(2_000_000)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PSD – Produtos Secundários da Desinfecção
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestCalcPSD:
+    def test_superficial_pequeno(self):
+        r = calc_psd(tem_superficial=True, populacao=30_000)
+        assert r == {"qtd": 1, "freq": "Bimestral", "meses": MESES_BIMESTRAL}
+
+    def test_superficial_medio(self):
+        r = calc_psd(tem_superficial=True, populacao=200_000)
+        assert r["qtd"] == 4
+        assert r["freq"] == "Bimestral"
+
+    def test_superficial_grande(self):
+        r = calc_psd(tem_superficial=True, populacao=300_000)
+        assert r["qtd"] == 8
+
+    def test_subterraneo_pequeno_anual(self):
+        r = calc_psd(tem_superficial=False, populacao=30_000)
+        assert r["freq"] == "Anual"
+        assert r["meses"] == MES_ANUAL
+
+    def test_subterraneo_medio_semestral(self):
+        r = calc_psd(tem_superficial=False, populacao=100_000)
+        assert r["freq"] == "Semestral"
+        assert r["qtd"] == 2
+
+
+class TestParamsPSDPorDesinfetante:
+    def test_hipoclorito_sem_preoxidacao(self):
+        params = calc_params_psd("Hipoclorito de Sódio (NaOCl)",
+                                 "Não realiza pré-oxidação")
+        assert "Bromato" not in params  # cloro não gera bromato
+        assert "Clorato" in params
+        assert "Cloraminas Total" not in params
+
+    def test_cloraminas_exige_ndma_e_thm(self):
+        params = calc_params_psd("Cloraminas (cloraminação)",
+                                 "Não realiza pré-oxidação")
+        assert "N-nitrosodimetilamina" in params
+        assert "Cloraminas Total" in params
+        assert "Trihalometanos Total" in params
+
+    def test_ozonio_exige_bromato(self):
+        params = calc_params_psd("Ozônio (O₃)",
+                                 "Não realiza pré-oxidação")
+        assert "Bromato" in params
+
+    def test_preoxidacao_ozonio_inclui_bromato_mesmo_com_cloro(self):
+        """Cenário real: desinfetante cloro + pré-oxidação ozônio → Bromato obrigatório."""
+        params = calc_params_psd("Hipoclorito de Sódio (NaOCl)", "Ozônio")
+        assert "Bromato" in params
+
+    def test_dioxido_cloro_minimo(self):
+        params = calc_params_psd("Dióxido de Cloro (ClO₂)",
+                                 "Não realiza pré-oxidação")
+        assert set(params) == {"Clorato", "Clorito"}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Frequências
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestFrequencias:
+    def test_coliformes_saida_superficial(self):
+        freq, qtd = freq_coliformes_saida(True)
+        assert qtd == 8
+        assert "2 vezes" in freq
+
+    def test_coliformes_saida_subterraneo(self):
+        freq, qtd = freq_coliformes_saida(False)
+        assert qtd == 4
+        assert freq == "Semanal"
+
+    def test_turbidez_eta_convencional(self):
+        assert freq_turbidez_filtro("ETA Convencional (Filtração Rápida)") == "A cada 2 horas"
+
+    def test_turbidez_filtracao_lenta(self):
+        assert freq_turbidez_filtro("Filtração Lenta") == "Diária"
+
+    def test_turbidez_membrana(self):
+        assert freq_turbidez_filtro("Filtração em Membrana") == "A cada 2 horas"
+
+    def test_turbidez_simples_desinfeccao(self):
+        assert freq_turbidez_filtro("Simples Desinfecção (sem ETA)") is None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Captacao / Sistema – propriedades derivadas
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestCaptacao:
+    def test_is_superficial(self):
+        assert Captacao("Rio", "Superficial").is_superficial is True
+        assert Captacao("Poço", "Subterrâneo").is_superficial is False
+
+    def test_case_insensitive(self):
+        assert Captacao("X", "SUPERFICIAL").is_superficial is True
+
+
+class TestSistemaProperties:
+    def _sis(self, **kwargs):
+        defaults = dict(municipio="Test", nome="SAA Test", localidades="")
+        defaults.update(kwargs)
+        return Sistema(**defaults)
+
+    def test_default_captacao_subterraneo(self):
+        s = self._sis(manancial="Subterrâneo")
+        assert len(s.captacoes) == 1
+        assert s.captacoes[0].is_superficial is False
+        assert s.tem_subterraneo is True
+        assert s.tem_superficial is False
+
+    def test_default_captacao_superficial(self):
+        s = self._sis(manancial="Superficial")
+        assert s.captacoes[0].is_superficial is True
+        assert s.tem_superficial is True
+
+    def test_misto_via_captacoes(self):
+        s = self._sis(captacoes=[
+            Captacao("Poço 1", "Subterrâneo"),
+            Captacao("Rio X", "Superficial"),
+        ])
+        assert s.is_misto is True
+        assert s.manancial_efetivo == "Misto"
+
+    def test_manancial_efetivo_derivado(self):
+        # Mesmo declarando "Subterrâneo", se as captações forem superficiais...
+        s = self._sis(
+            manancial="Subterrâneo",
+            captacoes=[Captacao("Rio", "Superficial")],
+        )
+        # A verdade está nas captações
+        assert s.manancial_efetivo == "Superficial"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# gerar_plano – integração
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestGerarPlano:
+    def _saa_padrao(self, **overrides):
+        defaults = dict(
+            municipio="Batalha", nome="SAA Bacia",
+            localidades="Urbano", tipo="SAA",
+            manancial="Superficial", populacao=20_000,
+            n_filtros=4, tratamento="ETA Convencional (Filtração Rápida)",
+        )
+        defaults.update(overrides)
+        return Sistema(**defaults)
+
+    def test_saa_completo_gera_captacao_filtros_saida_rede(self):
+        s = self._saa_padrao(escopo="completo")
+        linhas = gerar_plano(s)
+        etapas = {l.etapa for l in linhas}
+        assert "Água Bruta – Captação" in etapas
+        assert "Saída por Filtro" in etapas
+        assert "Saída do Tratamento" in etapas
+        assert "Rede de Distribuição" in etapas
+
+    def test_saa_trat_dist_nao_gera_captacao(self):
+        s = self._saa_padrao(escopo="trat_dist")
+        linhas = gerar_plano(s)
+        etapas = {l.etapa for l in linhas}
+        assert "Água Bruta – Captação" not in etapas
+        assert "Saída do Tratamento" in etapas
+        assert "Rede de Distribuição" in etapas
+
+    def test_saa_dist_so_rede(self):
+        s = self._saa_padrao(escopo="dist")
+        linhas = gerar_plano(s)
+        etapas = {l.etapa for l in linhas}
+        assert etapas == {"Rede de Distribuição"}
+
+    def test_filtros_geram_uma_linha_por_unidade(self):
+        s = self._saa_padrao(n_filtros=6)
+        linhas = gerar_plano(s)
+        linhas_filtro = [l for l in linhas if l.etapa == "Saída por Filtro"]
+        descs = {l.ponto_desc for l in linhas_filtro}
+        assert len(descs) == 6
+
+    def test_simples_desinfeccao_nao_gera_filtros(self):
+        s = self._saa_padrao(
+            tratamento="Simples Desinfecção (Superficial – sem ETA)",
+            n_filtros=0,
+        )
+        linhas = gerar_plano(s)
+        assert not any(l.etapa == "Saída por Filtro" for l in linhas)
+
+    def test_misto_psd_vai_para_rede_nao_saida(self):
+        """Sistemas com qualquer captação superficial: PSD na rede, não na saída."""
+        s = self._saa_padrao(
+            captacoes=[
+                Captacao("Poço 1", "Subterrâneo"),
+                Captacao("Rio X", "Superficial"),
+            ],
+        )
+        linhas = gerar_plano(s)
+        psd_saida = [l for l in linhas
+                     if l.grupo == "Prod. Sec. da Desinfecção"
+                     and l.etapa == "Saída do Tratamento"]
+        psd_rede = [l for l in linhas
+                    if l.grupo == "Prod. Sec. da Desinfecção"
+                    and l.etapa == "Rede de Distribuição"]
+        assert len(psd_saida) == 0
+        assert len(psd_rede) > 0
+
+    def test_subterraneo_psd_na_saida(self):
+        s = self._saa_padrao(
+            captacoes=[Captacao("Poço 1", "Subterrâneo")],
+        )
+        linhas = gerar_plano(s)
+        psd_saida = [l for l in linhas
+                     if l.grupo == "Prod. Sec. da Desinfecção"
+                     and l.etapa == "Saída do Tratamento"]
+        assert len(psd_saida) > 0
+
+    def test_captacao_superficial_tem_cianobacterias(self):
+        s = self._saa_padrao(captacoes=[Captacao("Rio", "Superficial")])
+        linhas = gerar_plano(s)
+        ciano = [l for l in linhas if "Cianobactéria" in l.parametro]
+        assert len(ciano) == 1
+
+    def test_captacao_subterranea_nao_tem_cianobacterias(self):
+        s = self._saa_padrao(
+            manancial="Subterrâneo",
+            captacoes=[Captacao("Poço", "Subterrâneo")],
+        )
+        linhas = gerar_plano(s)
+        ciano = [l for l in linhas if "Cianobactéria" in l.parametro]
+        assert len(ciano) == 0
+
+    def test_subterraneo_tem_condutividade(self):
+        s = self._saa_padrao(
+            manancial="Subterrâneo",
+            captacoes=[Captacao("Poço", "Subterrâneo")],
+        )
+        linhas = gerar_plano(s)
+        cond = [l for l in linhas if "Condutividade" in l.parametro]
+        assert len(cond) == 1
+
+    def test_superficial_tem_dqo_dbo_od(self):
+        s = self._saa_padrao(captacoes=[Captacao("Rio", "Superficial")])
+        linhas = gerar_plano(s)
+        params = {l.parametro for l in linhas}
+        assert "DQO" in params and "DBO" in params and "OD" in params
+
+    def test_pontos_rede_batem_anexo14(self):
+        s = self._saa_padrao(populacao=30_000)  # → 30 pontos
+        linhas = gerar_plano(s)
+        # Filtrar apenas pontos FQ "regulares" da rede (não PSD nem condicionais)
+        pontos = {l.ponto_desc for l in linhas
+                  if l.etapa == "Rede de Distribuição"
+                  and l.grupo == "Físico-Químico e Microbiológico"
+                  and l.parametro in PARAMS_FQ_BASICO}
+        assert len(pontos) == 30
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LinhaPlano – cálculos
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestLinhaPlano:
+    def test_quantidade_no_mes_dentro_da_lista(self):
+        l = LinhaPlano(
+            etapa="X", grupo="X", parametro="X",
+            ponto_tipo="X", ponto_desc="X",
+            frequencia="Semestral", quantidade=2,
+            meses_coleta=[1, 7], base_legal="X",
+        )
+        assert l.quantidade_no_mes(1) == 2
+        assert l.quantidade_no_mes(3) == 0
+
+    def test_total_anual_simples(self):
+        l = LinhaPlano(
+            etapa="X", grupo="X", parametro="X",
+            ponto_tipo="X", ponto_desc="X",
+            frequencia="Trimestral", quantidade=1,
+            meses_coleta=MESES_TRIMESTRAL, base_legal="X",
+        )
+        assert l.total_anual == 4
+
+    def test_a_cada_2h_24h(self):
+        l = LinhaPlano(
+            etapa="X", grupo="X", parametro="X",
+            ponto_tipo="X", ponto_desc="X",
+            frequencia="A cada 2 horas", quantidade=1,
+            meses_coleta=list(range(1, 13)), base_legal="X",
+            horas_dia=24,
+        )
+        # 12 amostras/dia × 365 dias = 4380
+        assert l.total_anual == 12 * 365
+
+    def test_a_cada_2h_12h(self):
+        l = LinhaPlano(
+            etapa="X", grupo="X", parametro="X",
+            ponto_tipo="X", ponto_desc="X",
+            frequencia="A cada 2 horas", quantidade=1,
+            meses_coleta=list(range(1, 13)), base_legal="X",
+            horas_dia=12,
+        )
+        # 6 amostras/dia × 365 = 2190
+        assert l.total_anual == 6 * 365
+
+    def test_is_operacional(self):
+        for freq in ("A cada 2 horas", "Diário"):
+            l = LinhaPlano(
+                etapa="X", grupo="X", parametro="X",
+                ponto_tipo="X", ponto_desc="X",
+                frequencia=freq, quantidade=1,
+                meses_coleta=[1], base_legal="X",
+            )
+            assert l.is_operacional is True
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Validações
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestValidacoes:
+    def _sis(self, **kwargs):
+        defaults = dict(municipio="Test", nome="SAA Test",
+                        localidades="", populacao=10_000)
+        defaults.update(kwargs)
+        return Sistema(**defaults)
+
+    def test_filtros_em_simples_desinfeccao_avisa(self):
+        s = self._sis(
+            tratamento="Simples Desinfecção (Superficial – sem ETA)",
+            n_filtros=4,
+        )
+        avisos = validar_sistema(s)
+        assert any("ignorado" in a.lower() for a in avisos)
+
+    def test_eta_sem_filtros_avisa(self):
+        s = self._sis(
+            tratamento="ETA Convencional (Filtração Rápida)",
+            n_filtros=0,
+        )
+        avisos = validar_sistema(s)
+        assert any("filtros" in a.lower() for a in avisos)
+
+    def test_manancial_declarado_diverge_avisa(self):
+        s = self._sis(
+            manancial="Superficial",
+            captacoes=[Captacao("Poço", "Subterrâneo")],
+        )
+        avisos = validar_sistema(s)
+        assert any("superficiais" in a.lower() for a in avisos)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Excel – fix das larguras (smoke test)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestExcel:
+    def test_widths_alinhados_em_todas_as_abas(self):
+        """Verifica que `_apply_widths` não levanta ValueError."""
+        from excel_export import gerar_excel
+        s = Sistema(
+            municipio="Test", nome="SAA Test",
+            localidades="Urbano", tipo="SAA",
+            manancial="Superficial", populacao=20_000,
+            n_filtros=4,
+        )
+        # Não deve levantar exceção
+        bytes_ = gerar_excel([s], 2026)
+        assert len(bytes_) > 1000  # arquivo Excel mínimo
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Entry point
+# ══════════════════════════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    sys.exit(pytest.main([__file__, "-v", "--tb=short"]))
