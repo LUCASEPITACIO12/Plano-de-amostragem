@@ -2,13 +2,19 @@
 app.py  –  Plano de Amostragem 888/2021
 Execute:  streamlit run app.py
 """
-import streamlit as st
-import pandas as pd
+import json
+import pathlib
+from dataclasses import asdict
 from datetime import date
 
+import pandas as pd
+import streamlit as st
+
 from calculos import (
-    Sistema, gerar_plano, resumo_sistema,
+    Sistema, Captacao,
+    gerar_plano, resumo_sistema, validar_sistema,
     calc_anexo14, faixa_populacional, MESES,
+    DESINFETANTE_OPCOES, PREOX_OPCOES,
 )
 from excel_export import gerar_excel
 
@@ -63,48 +69,128 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ── Caminho base (resolve assets em qualquer cwd) ─────────────────────────────
+BASE_DIR = pathlib.Path(__file__).parent
+ASSETS_DIR = BASE_DIR / "assets"
+
+
+# ── Helpers de persistência ──────────────────────────────────────────────────
+
+def sistemas_para_dict(sistemas: list[Sistema]) -> list[dict]:
+    """Converte sistemas em dict serializável (captacoes incluídas)."""
+    return [asdict(s) for s in sistemas]
+
+
+def sistemas_de_dict(dados: list[dict]) -> list[Sistema]:
+    """Recria sistemas a partir de dicts (compatível com asdict)."""
+    out = []
+    for d in dados:
+        d = dict(d)  # cópia rasa
+        caps_raw = d.pop("captacoes", None) or []
+        caps = [Captacao(**c) for c in caps_raw]
+        out.append(Sistema(captacoes=caps, **d))
+    return out
+
+
+# ── Cache do plano (acelera reruns) ───────────────────────────────────────────
+
+@st.cache_data(show_spinner=False)
+def _gerar_plano_cached(sistema_dict_str: str):
+    """Recebe o sistema serializado e devolve resumo. Chave de cache é a string."""
+    s = sistemas_de_dict(json.loads(sistema_dict_str))[0]
+    return resumo_sistema(s)
+
+
+def resumo_cached(s: Sistema):
+    return _gerar_plano_cached(json.dumps(asdict(s), default=str))
+
+
 # ── Estado da sessão ──────────────────────────────────────────────────────────
 if "sistemas" not in st.session_state:
     st.session_state.sistemas = []
-if "sistema_editando" not in st.session_state:
-    st.session_state.sistema_editando = None
+if "captacoes_form" not in st.session_state:
+    st.session_state["captacoes_form"] = [{"nome": "", "tipo": "Subterrâneo"}]
+if "escopo_sel" not in st.session_state:
+    st.session_state["escopo_sel"] = "completo"
 
-# ── Sidebar – cadastro de sistemas ───────────────────────────────────────────
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#                                    SIDEBAR
+# ═══════════════════════════════════════════════════════════════════════════════
+
 with st.sidebar:
-    # ── Header com logos ────────────────────────────────────────────────────
-    import pathlib
-
-
-    # Sidebar – só título e subtítulo
     st.markdown("### 💧 Plano de Amostragem")
     st.caption("Portaria GM/MS nº 888/2021 · SESAU-AL / GVAM")
 
-    st.divider()
+    # ── Salvar / Carregar plano ─────────────────────────────────────────────
+    with st.expander("💾 Salvar / Carregar plano", expanded=False):
+        if st.session_state.sistemas:
+            payload = json.dumps(
+                sistemas_para_dict(st.session_state.sistemas),
+                ensure_ascii=False, indent=2, default=str,
+            )
+            st.download_button(
+                "⬇️ Baixar plano (.json)",
+                data=payload.encode("utf-8"),
+                file_name=f"plano_888_{date.today().isoformat()}.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+        else:
+            st.caption("Cadastre ao menos um sistema para habilitar o download.")
 
+        up = st.file_uploader("Carregar plano (.json)", type=["json"],
+                              key="upload_json")
+        if up is not None:
+            try:
+                dados = json.loads(up.read().decode("utf-8"))
+                st.session_state.sistemas = sistemas_de_dict(dados)
+                st.success(f"{len(st.session_state.sistemas)} sistema(s) carregado(s).")
+            except Exception as e:
+                st.error(f"Erro ao carregar JSON: {e}")
+
+    st.divider()
     st.subheader("➕ Cadastrar Sistema")
 
-    # ── Captações – fora do form (botões não podem ficar dentro de st.form) ───
-    if "captacoes_form" not in st.session_state:
-        st.session_state["captacoes_form"] = [{"nome": "", "tipo": "Subterrâneo"}]
+    # ── Escopo (FORA do form para reagir em tempo real) ─────────────────────
+    st.markdown("**Escopo de responsabilidade da concessão**")
+    escopo = st.radio(
+        "A concessão é responsável por:",
+        options=["completo", "trat_dist", "dist"],
+        format_func=lambda x: {
+            "completo":  "🔵 Completo – captação + tratamento + distribuição",
+            "trat_dist": "🟡 Tratamento + distribuição",
+            "dist":      "🟠 Somente distribuição",
+        }[x],
+        key="escopo_sel",
+        help=(
+            "Selecione apenas o escopo sob responsabilidade da concessão. "
+            "Etapas de terceiros devem ter seus laudos exigidos contratualmente."
+        ),
+    )
 
-    escopo_atual = st.session_state.get("escopo_tmp", "completo")
-    if escopo_atual == "completo":
+    if escopo == "dist":
+        st.info(
+            "⚠️ A concessão monitora apenas a rede. O responsável pelo "
+            "tratamento deve fornecer os laudos das etapas anteriores.",
+            icon="⚠️",
+        )
 
+    # ── Captações – fora do form (precisa de botões) ────────────────────────
+    if escopo == "completo":
         st.markdown("**Pontos de captação**")
         st.caption(
             "Cadastre cada poço, nascente ou tomada d'água individualmente. "
-            "Use o botão de tipo para alternar entre Subterrâneo e Superficial. "
             "O plano sai com o nome real de cada ponto."
         )
 
         captacoes_form = st.session_state["captacoes_form"]
 
-        # Resumo rápido de tipos
+        # Resumo rápido
         n_sup = sum(1 for c in captacoes_form if c.get("tipo") == "Superficial")
         n_sub = sum(1 for c in captacoes_form if c.get("tipo") == "Subterrâneo")
         total_pts = len(captacoes_form)
 
-        # Badge de resumo
         partes = []
         if n_sub: partes.append(f"💧 {n_sub} subterrâneo(s)")
         if n_sup: partes.append(f"🌊 {n_sup} superficial(is)")
@@ -113,10 +199,9 @@ with st.sidebar:
             f"font-size:13px;margin-bottom:8px;color:#1a3a5c;font-weight:500'>"
             f"{'  ·  '.join(partes) if partes else '—'} &nbsp;|&nbsp; "
             f"Total: {total_pts} ponto(s)</div>",
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
-        # Separar por tipo para exibição organizada
         for idx_c in range(len(captacoes_form)):
             cap = captacoes_form[idx_c]
             tipo_atual = cap.get("tipo", "Subterrâneo")
@@ -128,21 +213,20 @@ with st.sidebar:
                 st.markdown(
                     f"<div style='font-size:22px;padding-top:28px;text-align:center'>"
                     f"{icone}</div>",
-                    unsafe_allow_html=True
+                    unsafe_allow_html=True,
                 )
             with col_nome:
                 captacoes_form[idx_c]["nome"] = st.text_input(
                     f"Ponto {idx_c+1}",
                     value=cap.get("nome", ""),
-                    placeholder="Ex: Poço PZA-01  /  Rio São Francisco  /  Nascente Serra",
+                    placeholder="Ex: Poço PZA-01  /  Rio São Francisco",
                     key=f"cap_nome_{idx_c}",
                 )
             with col_tipo:
                 opts = ["Subterrâneo", "Superficial"]
                 cur  = tipo_atual if tipo_atual in opts else "Subterrâneo"
                 captacoes_form[idx_c]["tipo"] = st.selectbox(
-                    "Tipo",
-                    opts,
+                    "Tipo", opts,
                     index=opts.index(cur),
                     key=f"cap_tipo_{idx_c}",
                 )
@@ -154,68 +238,51 @@ with st.sidebar:
                     st.session_state["captacoes_form"].pop(idx_c)
                     st.rerun()
 
-        # Botões de adição rápida
         col_sub, col_sup, _ = st.columns([2, 2, 2])
         with col_sub:
-            if st.button("＋ Poço / Subterrâneo", key="add_sub", use_container_width=True):
-                st.session_state["captacoes_form"].append({"nome": "", "tipo": "Subterrâneo"})
+            if st.button("＋ Poço / Subterrâneo", key="add_sub",
+                         use_container_width=True):
+                st.session_state["captacoes_form"].append(
+                    {"nome": "", "tipo": "Subterrâneo"}
+                )
                 st.rerun()
         with col_sup:
-            if st.button("＋ Manancial / Superficial", key="add_sup", use_container_width=True):
-                st.session_state["captacoes_form"].append({"nome": "", "tipo": "Superficial"})
+            if st.button("＋ Manancial / Superficial", key="add_sup",
+                         use_container_width=True):
+                st.session_state["captacoes_form"].append(
+                    {"nome": "", "tipo": "Superficial"}
+                )
                 st.rerun()
 
-        # Aviso sistema misto
         if n_sup > 0 and n_sub > 0:
             st.info(
                 f"Sistema misto: {n_sub} subterrâneo(s) + {n_sup} superficial(is). "
-                "Os parâmetros de cada ponto serão gerados conforme o tipo — "
-                "DQO/DBO/OD e Cianobactérias apenas nos superficiais, "
-                "Condutividade apenas nos subterrâneos.",
+                "DQO/DBO/OD e Cianobactérias só nos superficiais, "
+                "Condutividade só nos subterrâneos.",
                 icon="ℹ️",
             )
 
     st.divider()
-    with st.form("form_sistema", clear_on_submit=True):
 
-        # ── Identificação ────────────────────────────────────────────────────
+    # ── FORM com os demais campos ───────────────────────────────────────────
+    with st.form("form_sistema", clear_on_submit=True):
         st.markdown("**Identificação**")
         municipio   = st.text_input("Município *", placeholder="Ex: Batalha")
-        nome_sis    = st.text_input("Nome do sistema *", placeholder="Ex: SAA Bacia Leiteira")
+        nome_sis    = st.text_input("Nome do sistema *",
+                                    placeholder="Ex: SAA Bacia Leiteira")
         localidades = st.text_area("Localidade(s) atendida(s)",
-                                   placeholder="Urbano, Zona Rural...", height=68)
+                                   placeholder="Urbano, Zona Rural...",
+                                   height=68)
 
-        # ── Escopo ───────────────────────────────────────────────────────────
-        st.markdown("**Escopo de responsabilidade da concessão**")
-        escopo = st.radio(
-            "A concessão é responsável por:",
-            options=["completo", "trat_dist", "dist"],
-            format_func=lambda x: {
-                "completo":  "🔵 Completo – captação + tratamento + distribuição",
-                "trat_dist": "🟡 Tratamento + distribuição (recebe água bruta de terceiro)",
-                "dist":      "🟠 Somente distribuição (recebe água já tratada)",
-            }[x],
-            help=(
-                "Selecione apenas o escopo sob responsabilidade da concessão. "
-                "Etapas de terceiros devem ter seus laudos exigidos contratualmente."
-            ),
-        )
-
-        st.session_state["escopo_tmp"] = escopo
-        if escopo == "dist":
-            st.info(
-                "⚠️ A concessão monitora apenas a rede. O responsável pelo "
-                "tratamento deve fornecer os laudos das etapas anteriores.",
-                icon="⚠️",
-            )
-
-        # ── Características técnicas ─────────────────────────────────────────
         st.markdown("**Características técnicas**")
         col_t1, col_t2 = st.columns(2)
         with col_t1:
             tipo = st.selectbox("Tipo de sistema", ["SAA", "SAC"])
         with col_t2:
-            manancial = st.selectbox("Manancial", ["Superficial", "Subterrâneo", "Misto (Superficial + Subterrâneo)"])
+            manancial = st.selectbox(
+                "Manancial",
+                ["Superficial", "Subterrâneo", "Misto (Superficial + Subterrâneo)"],
+            )
 
         if escopo != "dist":
             tratamento = st.selectbox("Tipo de tratamento", [
@@ -225,44 +292,42 @@ with st.sidebar:
                 "Simples Desinfecção (Superficial – sem ETA)",
                 "Somente Desinfecção (Subterrâneo)",
             ])
-            n_filtros = st.number_input("Nº de unidades filtrantes", 0, 30, 0,
-                                        help="0 = sem filtros / simples desinfecção")
-            from calculos import DESINFETANTE_OPCOES, PREOX_OPCOES
+            n_filtros = st.number_input(
+                "Nº de unidades filtrantes", 0, 30, 0,
+                help="0 = sem filtros / simples desinfecção",
+            )
             desinfetante = st.selectbox(
                 "Desinfetante principal utilizado",
                 DESINFETANTE_OPCOES,
                 help=(
-                    "Define os Produtos Secundários da Desinfecção (PSD) obrigatorios "
-                    "— Nota (4) Anexo 9, Portaria 888/2021. "
-                    "Cloraminas: exige THM, Cloraminas Total e N-nitrosodimetilamina. "
-                    "Ozonio: exige Bromato. "
-                    "Dioxido de Cloro: somente Clorato e Clorito."
+                    "Define os Produtos Secundários da Desinfecção (PSD) "
+                    "obrigatórios — Nota (4) Anexo 9, Portaria 888/2021. "
+                    "Cloraminas: exige THM, Cloraminas Total e NDMA. "
+                    "Ozônio: exige Bromato. Dióxido de Cloro: somente Clorato e Clorito."
                 ),
             )
             oxidante_preox = st.selectbox(
-                "Oxidante utilizado na pre-oxidacao",
+                "Oxidante utilizado na pré-oxidação",
                 PREOX_OPCOES,
                 help=(
-                    "Se o sistema realiza pre-oxidacao com ozonio, o Bromato "
-                    "se torna obrigatorio mesmo que o desinfetante final seja cloro. "
-                    "Selecione 'Nao realiza pre-oxidacao' se nao houver essa etapa."
+                    "Pré-oxidação com Ozônio torna Bromato obrigatório, mesmo que "
+                    "o desinfetante final seja cloro."
                 ),
             )
         else:
-            tratamento = "Informado pelo responsavel pelo tratamento"
+            tratamento = "Informado pelo responsável pelo tratamento"
             n_filtros  = 0
-            desinfetante = "Hipoclorito de Sodio (NaOCl)"
-            oxidante_preox = "Nao realiza pre-oxidacao"
+            desinfetante   = "Hipoclorito de Sódio (NaOCl)"
+            oxidante_preox = "Não realiza pré-oxidação"
 
         col_p1, col_p2 = st.columns(2)
         with col_p1:
-            populacao = st.number_input("Populacao atendida (hab.)", 0, 5_000_000, 0, step=100)
+            populacao = st.number_input("População atendida (hab.)",
+                                        0, 5_000_000, 0, step=100)
         with col_p2:
-            n_ligacoes = st.number_input("No de ligacoes ativas", 0, 500_000, 0, step=10)
+            n_ligacoes = st.number_input("Nº de ligações ativas",
+                                         0, 500_000, 0, step=10)
 
-        captacoes_form = st.session_state.get("captacoes_form", [])
-
-        # ── Condicionais ─────────────────────────────────────────────────────
         if escopo != "dist":
             st.markdown("**Parâmetros condicionais**")
             col_c1, col_c2 = st.columns(2)
@@ -277,7 +342,6 @@ with st.sidebar:
             fluoretacao = pre_oxidacao = False
             acrilamida = epicloridrina = rede_pvc = False
 
-        # ── ETA / Unidade de tratamento ──────────────────────────────────────
         if escopo != "dist":
             nome_eta = st.text_input(
                 "ETA / Unidade de tratamento",
@@ -286,7 +350,6 @@ with st.sidebar:
         else:
             nome_eta = ""
 
-        # ── Funcionamento ─────────────────────────────────────────────────────
         if escopo != "dist":
             st.markdown("**Funcionamento**")
             col_h1, col_h2 = st.columns([2, 3])
@@ -295,17 +358,17 @@ with st.sidebar:
                     "Horas de operação por dia",
                     ["24 horas (contínuo)", "20 horas", "18 horas",
                      "16 horas", "12 horas", "8 horas", "Outro"],
-                    help="Afeta o cálculo de amostras monitoradas a cada 2 horas (turbidez, pH, cor, cloro)",
+                    help="Afeta cálculo de amostras 2h (turbidez, pH, cor, cloro)",
                 )
             with col_h2:
                 if horas_op == "Outro":
-                    horas_num = st.number_input("Informe as horas/dia", 1.0, 24.0, 24.0, step=0.5)
+                    horas_num = st.number_input("Informe as horas/dia",
+                                                1.0, 24.0, 24.0, step=0.5)
                 else:
                     horas_num = float(horas_op.split()[0])
         else:
             horas_num = 24.0
 
-        # ── Responsabilidade ─────────────────────────────────────────────────
         st.markdown("**Responsabilidade**")
         col_e1, col_e2 = st.columns(2)
         with col_e1:
@@ -330,10 +393,6 @@ with st.sidebar:
             rt_conselho = st.selectbox("Conselho", ["CREA", "CRQ", "CRT", "Outro"])
         with col_r3:
             rt_reg = st.text_input("Nº de registro", placeholder="Ex: 12345-D/AL")
-        rt_dist_nome = ""
-        rt_dist_conselho = "CREA"
-        rt_dist_reg = ""
-        responsavel_distribuicao = ""
 
         col_geo1, col_geo2 = st.columns(2)
         with col_geo1:
@@ -343,10 +402,14 @@ with st.sidebar:
 
         obs = st.text_area("Observações", height=56)
 
-        submitted = st.form_submit_button("✅ Adicionar sistema", use_container_width=True,
-                                          type="primary")
+        submitted = st.form_submit_button(
+            "✅ Adicionar sistema",
+            use_container_width=True,
+            type="primary",
+        )
 
     if submitted:
+        captacoes_form = st.session_state.get("captacoes_form", [])
         if not municipio or not nome_sis:
             st.error("Preencha pelo menos Município e Nome do sistema.")
         elif populacao == 0:
@@ -358,8 +421,8 @@ with st.sidebar:
                 localidades=localidades.strip(),
                 escopo=escopo,
                 captacoes=[
-                    __import__("calculos").Captacao(
-                        nome=c["nome"] if c["nome"] else f"Captacao {i+1}",
+                    Captacao(
+                        nome=c["nome"] if c["nome"] else f"Captação {i+1}",
                         tipo=c["tipo"],
                     )
                     for i, c in enumerate(captacoes_form)
@@ -384,22 +447,22 @@ with st.sidebar:
                 rt_conselho=rt_conselho,
                 rt_registro=rt_reg,
                 empresa_distribuicao=empresa_distribuicao,
-                responsavel_distribuicao=responsavel_distribuicao,
-                rt_dist_nome=rt_dist_nome,
-                rt_dist_conselho=rt_dist_conselho,
-                rt_dist_registro=rt_dist_reg,
                 latitude=lat,
                 longitude=lon,
                 obs=obs,
             )
+
+            # Validações cruzadas
+            avisos = validar_sistema(s)
+            for av in avisos:
+                st.warning(av, icon="⚠️")
+
             st.session_state.sistemas.append(s)
             st.session_state["captacoes_form"] = [{"nome": "", "tipo": "Subterrâneo"}]
-            if "escopo_tmp" in st.session_state:
-                del st.session_state["escopo_tmp"]
             st.success(f"Sistema **{nome_sis}** ({municipio}) adicionado!")
             st.rerun()
 
-    # Lista de sistemas cadastrados
+    # ── Lista de sistemas cadastrados ────────────────────────────────────────
     if st.session_state.sistemas:
         st.divider()
         st.subheader(f"📋 Sistemas ({len(st.session_state.sistemas)})")
@@ -407,7 +470,7 @@ with st.sidebar:
             col_l, col_r = st.columns([3, 1])
             with col_l:
                 st.caption(f"**{s.municipio}** – {s.nome}")
-                st.caption(f"Pop.: {s.populacao:,} | {s.manancial} | {s.escopo}")
+                st.caption(f"Pop.: {s.populacao:,} | {s.manancial_efetivo} | {s.escopo}")
                 if s.empresa_responsavel:
                     st.caption(f"🏭 Trat.: {s.empresa_responsavel}")
                 if s.empresa_distribuicao:
@@ -422,10 +485,12 @@ with st.sidebar:
             st.session_state.sistemas = []
             st.rerun()
 
-# ── Área principal ────────────────────────────────────────────────────────────
-# Banner principal
-import pathlib as _pl
-_capa = _pl.Path("assets/capa.png")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#                                ÁREA PRINCIPAL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_capa = ASSETS_DIR / "capa.png"
 if _capa.exists():
     st.image(str(_capa), use_container_width=True)
 else:
@@ -454,31 +519,28 @@ if not st.session_state.sistemas:
     """)
     st.stop()
 
-# ── Métricas gerais ───────────────────────────────────────────────────────────
 sistemas = st.session_state.sistemas
 ano = st.selectbox("Ano do plano", [2025, 2026, 2027], index=1,
                     label_visibility="collapsed")
 
 total_pop    = sum(s.populacao for s in sistemas)
 total_pontos = sum(calc_anexo14(s.populacao) for s in sistemas if s.tipo == "SAA")
-total_ano    = 0
-for s in sistemas:
-    linhas = gerar_plano(s)
-    total_ano += sum(
-        l.total_anual for l in linhas
-        if l.frequencia not in ("A cada 2 horas", "Diário")
-    )
+total_ano    = sum(
+    resumo_cached(s)["total_amostras_ano"] for s in sistemas
+)
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric("Sistemas cadastrados", len(sistemas))
 with col2:
-    st.metric("População total atendida", f"{total_pop:,.0f}".replace(",",".")+" hab.")
+    st.metric("População total atendida",
+              f"{total_pop:,.0f}".replace(",", ".") + " hab.")
 with col3:
     st.metric("Pontos mínimos na rede", total_pontos,
               help="Soma dos pontos mínimos de todos os SAA (Anexo 14)")
 with col4:
-    st.metric("Total amostras/ano (lab.)", f"{total_ano:,.0f}".replace(",","."),
+    st.metric("Total amostras/ano (lab.)",
+              f"{total_ano:,.0f}".replace(",", "."),
               help="Exclui monitoramentos operacionais (a cada 2h, diário)")
 
 st.divider()
@@ -497,9 +559,9 @@ with col_dl:
     )
 with col_info:
     st.caption(
-        "O Excel contém: **PLANO RESUMIDO** (uma linha por sistema), "
-        "**Plano - Anual** (uma linha por ponto × parâmetro × frequência) e "
-        "**TAB Resumo** (totais mensais por sistema)."
+        "O Excel contém: **PLANO RESUMIDO**, **Plano - Anual** "
+        "(uma linha por ponto × parâmetro), **TAB Resumo** (totais mensais), "
+        "**Memória de Cálculo** (auditoria) e **Ref. Anexo 14**."
     )
 
 st.divider()
@@ -508,7 +570,7 @@ st.divider()
 st.subheader("Quantitativo mínimo por sistema")
 
 for s in sistemas:
-    res    = resumo_sistema(s)
+    res    = resumo_cached(s)
     linhas = res["linhas"]
 
     escopo_texto = {
@@ -521,6 +583,11 @@ for s in sistemas:
         f"**{s.municipio} – {s.nome}** | {s.populacao:,} hab. | {escopo_texto}",
         expanded=(len(sistemas) == 1),
     ):
+        # Avisos de validação
+        avisos = validar_sistema(s)
+        for av in avisos:
+            st.warning(av, icon="⚠️")
+
         if s.escopo == "dist":
             st.markdown(
                 '<div class="aviso-escopo">⚠️ Escopo: somente distribuição. '
@@ -529,16 +596,27 @@ for s in sistemas:
                 unsafe_allow_html=True,
             )
 
-        # Métricas do sistema
         mc1, mc2, mc3, mc4 = st.columns(4)
         mc1.metric("Pontos mínimos rede (Anx.14)", res["n_pontos_rede"])
         if s.nome_eta:
-            st.caption(f"🏭 ETA: {s.nome_eta}  |  ⏱ {s.horas_funcionamento:.0f}h/dia de operação")
+            st.caption(
+                f"🏭 ETA: {s.nome_eta}  |  ⏱ {s.horas_funcionamento:.0f}h/dia"
+            )
         mc2.metric("Faixa populacional", res["faixa"])
         mc3.metric("Amostras/ano (lab.)", f"{res['total_amostras_ano']:,}")
         mc4.metric("PSD", f"{res['psd_qtd']} ponto(s) / {res['psd_freq']}")
 
-        # Tabela por etapa
+        # Gráfico de amostras por mês
+        meses_totais = []
+        for m in range(1, 13):
+            t = sum(l.quantidade_no_mes(m) for l in linhas
+                    if not l.is_operacional)
+            meses_totais.append(t)
+        df_mes = pd.DataFrame(
+            {"Mês": [m[:3] for m in MESES], "Amostras": meses_totais}
+        ).set_index("Mês")
+        st.bar_chart(df_mes, height=180)
+
         etapas = list(dict.fromkeys(l.etapa for l in linhas))
 
         for etapa in etapas:
@@ -549,7 +627,6 @@ for s in sistemas:
                 unsafe_allow_html=True,
             )
 
-            # Agrupar por parâmetro único (evitar repetir filtro por filtro)
             if etapa == "Saída por Filtro":
                 n_f = len(set(l.ponto_desc for l in lins))
                 ex = lins[0]
@@ -563,11 +640,14 @@ for s in sistemas:
                     "Total/ano (todos filtros)": ex.total_anual * n_f,
                     "Base Legal": ex.base_legal,
                 }]
-                st.caption(f"📋 {n_f} unidade(s) filtrante(s) — monitoramento individual por filtro (Anexo 2)")
-                st.dataframe(pd.DataFrame(rows_filtro), hide_index=True, use_container_width=True)
+                st.caption(
+                    f"📋 {n_f} unidade(s) filtrante(s) — monitoramento "
+                    "individual por filtro (Anexo 2)"
+                )
+                st.dataframe(pd.DataFrame(rows_filtro), hide_index=True,
+                             use_container_width=True)
                 continue
 
-            # Agrupar por parâmetro + frequência para exibição limpa
             grupos_vis: dict = {}
             for l in lins:
                 key = (l.parametro, l.grupo, l.frequencia,
@@ -589,7 +669,8 @@ for s in sistemas:
                     "Parâmetro":   param,
                     "Grupo":       tag_map.get(grupo, grupo),
                     "Frequência":  freq,
-                    "Qtd/evento":  qtd if l.frequencia not in ("A cada 2 horas","Diário") else f"{int(s.horas_funcionamento/2)}×/dia",
+                    "Qtd/evento":  qtd if not l.is_operacional
+                                       else f"{int(s.horas_funcionamento/2)}×/dia",
                     "Total/ano":   total,
                     "Base Legal":  base,
                 })
