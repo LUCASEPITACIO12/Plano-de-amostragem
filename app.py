@@ -97,7 +97,7 @@ def sistemas_de_dict(dados: list[dict]) -> list[Sistema]:
 @st.cache_data(show_spinner=False)
 def _gerar_plano_cached(sistema_dict_str: str):
     """Recebe o sistema serializado e devolve resumo. Chave de cache é a string."""
-    s = sistemas_de_dict(json.loads(sistema_dict_str))[0]
+    s = sistemas_de_dict([json.loads(sistema_dict_str)])[0]
     return resumo_sistema(s)
 
 
