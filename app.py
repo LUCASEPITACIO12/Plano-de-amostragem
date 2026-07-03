@@ -13,7 +13,7 @@ import streamlit as st
 from calculos import (
     Sistema, Captacao,
     gerar_plano, resumo_sistema, validar_sistema,
-    calc_anexo14, faixa_populacional, MESES,
+    calc_anexo14, pontos_rede, faixa_populacional, MESES,
     DESINFETANTE_OPCOES, PREOX_OPCOES,
 )
 from excel_export import gerar_excel
@@ -156,28 +156,39 @@ with st.sidebar:
     st.markdown("**Escopo de responsabilidade da concessão**")
     escopo = st.radio(
         "A concessão é responsável por:",
-        options=["completo", "trat_dist", "dist"],
+        options=["rede", "cap_trat", "completo"],
         format_func=lambda x: {
-            "completo":  "🔵 Completo – captação + tratamento + distribuição",
-            "trat_dist": "🟡 Tratamento + distribuição",
-            "dist":      "🟠 Somente distribuição",
+            "rede":     "🟠 Somente distribuição (opera apenas a rede)",
+            "cap_trat": "🟡 Captação + Tratamento (produtor – não opera a rede)",
+            "completo": "🔵 Completo – captação + tratamento + distribuição",
         }[x],
         key="escopo_sel",
         help=(
-            "Selecione apenas o escopo sob responsabilidade da concessão. "
+            "Selecione o escopo sob responsabilidade da concessão:\n\n"
+            "• Somente distribuição — recebe água já tratada e opera só a rede.\n\n"
+            "• Captação + Tratamento — produz água tratada e entrega a um "
+            "distribuidor (não opera a rede).\n\n"
+            "• Completo — opera toda a cadeia.\n\n"
             "Etapas de terceiros devem ter seus laudos exigidos contratualmente."
         ),
     )
 
-    if escopo == "dist":
+    if escopo == "rede":
         st.info(
-            "⚠️ A concessão monitora apenas a rede. O responsável pelo "
-            "tratamento deve fornecer os laudos das etapas anteriores.",
+            "⚠️ A concessão opera apenas a rede. O responsável pela produção "
+            "(captação + tratamento) deve fornecer os laudos das etapas anteriores.",
             icon="⚠️",
+        )
+    elif escopo == "cap_trat":
+        st.info(
+            "ℹ️ Concessão produtora: monitora captação e tratamento até a saída "
+            "(ponto de entrega da água tratada). A rede é responsabilidade do "
+            "distribuidor.",
+            icon="ℹ️",
         )
 
     # ── Captações – fora do form (precisa de botões) ────────────────────────
-    if escopo == "completo":
+    if escopo in ("cap_trat", "completo"):
         st.markdown("**Pontos de captação**")
         st.caption(
             "Cadastre cada poço, nascente ou tomada d'água individualmente. "
@@ -284,7 +295,7 @@ with st.sidebar:
                 ["Superficial", "Subterrâneo", "Misto (Superficial + Subterrâneo)"],
             )
 
-        if escopo != "dist":
+        if escopo != "rede":
             tratamento = st.selectbox("Tipo de tratamento", [
                 "ETA Convencional (Filtração Rápida)",
                 "Filtração Lenta",
@@ -328,7 +339,7 @@ with st.sidebar:
             n_ligacoes = st.number_input("Nº de ligações ativas",
                                          0, 500_000, 0, step=10)
 
-        if escopo != "dist":
+        if escopo != "rede":
             st.markdown("**Parâmetros condicionais**")
             col_c1, col_c2 = st.columns(2)
             with col_c1:
@@ -342,7 +353,7 @@ with st.sidebar:
             fluoretacao = pre_oxidacao = False
             acrilamida = epicloridrina = rede_pvc = False
 
-        if escopo != "dist":
+        if escopo != "rede":
             nome_eta = st.text_input(
                 "ETA / Unidade de tratamento",
                 placeholder="Ex: ETA Morro do Gaia / UTS Ilha das Canas",
@@ -350,7 +361,7 @@ with st.sidebar:
         else:
             nome_eta = ""
 
-        if escopo != "dist":
+        if escopo != "rede":
             st.markdown("**Funcionamento**")
             col_h1, col_h2 = st.columns([2, 3])
             with col_h1:
@@ -510,12 +521,13 @@ if not st.session_state.sistemas:
 
     | Escopo | Captação | Tratamento | Rede |
     |--------|----------|------------|------|
+    | Somente distribuição (rede) | ❌ | ❌ | ✅ |
+    | Captação + Tratamento (produtor) | ✅ | ✅ | ❌ |
     | Completo | ✅ | ✅ | ✅ |
-    | Tratamento + Distribuição | ❌ | ✅ | ✅ |
-    | Somente Distribuição | ❌ | ❌ | ✅ |
 
-    > Quando a concessão recebe **água já tratada**, ela monitora apenas a rede —
-    > mas deve exigir contratualmente os laudos das etapas anteriores do fornecedor.
+    > **Produtor** (captação + tratamento) entrega água tratada a um distribuidor
+    > e não opera a rede. **Somente distribuição** recebe água já tratada e opera
+    > apenas a rede — devendo exigir contratualmente os laudos das etapas anteriores.
     """)
     st.stop()
 
@@ -524,7 +536,7 @@ ano = st.selectbox("Ano do plano", [2025, 2026, 2027], index=1,
                     label_visibility="collapsed")
 
 total_pop    = sum(s.populacao for s in sistemas)
-total_pontos = sum(calc_anexo14(s.populacao) for s in sistemas if s.tipo == "SAA")
+total_pontos = sum(pontos_rede(s) for s in sistemas if s.tipo == "SAA")
 total_ano    = sum(
     resumo_cached(s)["total_amostras_ano"] for s in sistemas
 )
@@ -574,9 +586,9 @@ for s in sistemas:
     linhas = res["linhas"]
 
     escopo_texto = {
-        "completo":  "🔵 Completo",
-        "trat_dist": "🟡 Tratamento + Distribuição",
-        "dist":      "🟠 Somente Distribuição",
+        "rede":     "🟠 Somente Distribuição",
+        "cap_trat": "🟡 Captação + Tratamento",
+        "completo": "🔵 Completo",
     }.get(s.escopo, s.escopo)
 
     with st.expander(
@@ -588,11 +600,18 @@ for s in sistemas:
         for av in avisos:
             st.warning(av, icon="⚠️")
 
-        if s.escopo == "dist":
+        if s.escopo == "rede":
             st.markdown(
-                '<div class="aviso-escopo">⚠️ Escopo: somente distribuição. '
+                '<div class="aviso-escopo">⚠️ Escopo: somente distribuição (rede). '
                 "O monitoramento de captação e tratamento é responsabilidade "
-                "do fornecedor da água tratada.</div>",
+                "do produtor da água tratada.</div>",
+                unsafe_allow_html=True,
+            )
+        elif s.escopo == "cap_trat":
+            st.markdown(
+                '<div class="aviso-escopo">ℹ️ Escopo: captação + tratamento '
+                "(produtor). A rede de distribuição é responsabilidade do "
+                "distribuidor.</div>",
                 unsafe_allow_html=True,
             )
 
