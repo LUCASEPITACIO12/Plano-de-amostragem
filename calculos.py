@@ -5,7 +5,7 @@ Toda a inteligência de cálculo fica aqui, desacoplada da UI e do Excel.
 """
 from math import ceil
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, ClassVar
 
 
 # ── Constantes regulatórias ───────────────────────────────────────────────────
@@ -174,9 +174,10 @@ class Sistema:
     localidades: str
 
     # ── Escopo de responsabilidade ──────────────────────────────────────────
-    # "completo"  = captação + tratamento + distribuição
-    # "trat_dist" = tratamento + distribuição (recebe água bruta de terceiro)
-    # "dist"      = somente distribuição (recebe água já tratada)
+    # "rede"      = somente distribuição (recebe água já tratada; opera só a rede)
+    # "cap_trat"  = captação + tratamento (produtor; entrega água tratada e NÃO
+    #               opera a rede de distribuição)
+    # "completo"  = captação + tratamento + distribuição (opera toda a cadeia)
     escopo: str = "completo"
 
     # ── Pontos de captação ──────────────────────────────────────────────────
@@ -223,8 +224,16 @@ class Sistema:
     longitude: str = ""
     obs: str = ""
 
+    # Mapeia escopos antigos (salvos em .json) para o novo modelo de 3 opções.
+    # "dist"      → "rede"     (era: somente distribuição)
+    # "trat_dist" → "completo" (não tem equivalente direto; assume o escopo mais
+    #                           abrangente por segurança regulatória — revisar)
+    _ESCOPO_LEGADO: ClassVar[dict] = {"dist": "rede", "trat_dist": "completo"}
+
     def __post_init__(self):
-        """Garante que captacoes seja sempre uma lista, nunca None."""
+        """Migra escopos antigos e garante que captacoes seja sempre uma lista."""
+        if self.escopo in self._ESCOPO_LEGADO:
+            self.escopo = self._ESCOPO_LEGADO[self.escopo]
         if self.captacoes is None:
             tipo_default = (
                 "Superficial" if "superficial" in self.manancial.lower()
@@ -584,8 +593,14 @@ def _linhas_saida_tratamento(s: Sistema) -> list[LinhaPlano]:
         base_legal="Anexo 13",
     ))
 
-    # PSD na saída (subterrâneo) – apenas parâmetros do desinfetante utilizado
-    if not tem_sup:
+    # PSD na saída – apenas parâmetros do desinfetante utilizado.
+    #  • Subterrâneo: sempre monitorado na saída do tratamento.
+    #  • Superficial: normalmente monitorado na REDE (Ponto de Entrega). Porém, se
+    #    a concessão é produtora e NÃO opera a rede (escopo "cap_trat"), o PSD é
+    #    monitorado na saída — que é o ponto de entrega da água tratada.
+    if not tem_sup or not monitora_rede(s):
+        obs_psd = ("Subterrâneo – monitorado na saída" if not tem_sup
+                   else "Superficial – monitorado na saída (concessão não opera a rede)")
         for param in params_psd:
             linhas.append(LinhaPlano(
                 etapa="Saída do Tratamento",
@@ -597,7 +612,7 @@ def _linhas_saida_tratamento(s: Sistema) -> list[LinhaPlano]:
                 quantidade=psd["qtd"],
                 meses_coleta=psd["meses"],
                 base_legal="Anexo 13",
-                obs_ponto="Subterrâneo – monitorado na saída",
+                obs_ponto=obs_psd,
             ))
 
     return linhas
@@ -757,26 +772,51 @@ def _linhas_sac(s: Sistema) -> list[LinhaPlano]:
     return linhas
 
 
+# ── Escopo: fonte única de verdade sobre o que a concessão monitora ──────────
+# Três opções:
+#   "rede"      → só distribuição (opera apenas a rede)
+#   "cap_trat"  → captação + tratamento (produtor; NÃO opera a rede)
+#   "completo"  → toda a cadeia (captação + tratamento + rede)
+
+def monitora_captacao(s: Sistema) -> bool:
+    return s.escopo in ("cap_trat", "completo")
+
+
+def monitora_tratamento(s: Sistema) -> bool:
+    return s.escopo in ("cap_trat", "completo")
+
+
+def monitora_rede(s: Sistema) -> bool:
+    return s.escopo in ("rede", "completo")
+
+
+def pontos_rede(s: Sistema) -> int:
+    """
+    Nº de pontos na rede (Anexo 14). Retorna 0 quando a concessão NÃO opera a
+    rede (escopo "cap_trat"), pois nesse caso não há monitoramento de rede.
+    """
+    return calc_anexo14(s.populacao) if monitora_rede(s) else 0
+
+
 def gerar_plano(s: Sistema) -> list[LinhaPlano]:
     """
     Gera todas as linhas do plano de amostragem para um sistema.
     Respeita o escopo de responsabilidade da concessão.
+    A rede NÃO é mais monitorada incondicionalmente: só entra nos escopos
+    "rede" e "completo".
     """
     linhas: list[LinhaPlano] = []
-    has_cap  = s.escopo == "completo"
-    has_trat = s.escopo in ("completo", "trat_dist")
-    # rede sempre é monitorada
 
-    if has_cap:
+    if monitora_captacao(s):
         linhas.extend(_linhas_captacao(s))
-    if has_trat:
+    if monitora_tratamento(s):
         linhas.extend(_linhas_filtros(s))
         linhas.extend(_linhas_saida_tratamento(s))
-
-    if s.tipo == "SAA":
-        linhas.extend(_linhas_rede(s))
-    else:
-        linhas.extend(_linhas_sac(s))
+    if monitora_rede(s):
+        if s.tipo == "SAA":
+            linhas.extend(_linhas_rede(s))
+        else:
+            linhas.extend(_linhas_sac(s))
 
     return linhas
 
@@ -785,7 +825,7 @@ def resumo_sistema(s: Sistema) -> dict:
     """Retorna um dicionário com os totais do sistema para exibição rápida."""
     linhas = gerar_plano(s)
     total_ano = sum(l.total_anual for l in linhas if not l.is_operacional)
-    n_pts = calc_anexo14(s.populacao)
+    n_pts = pontos_rede(s)
     psd = calc_psd(s.tem_superficial, s.populacao)
     return {
         "n_pontos_rede": n_pts,
